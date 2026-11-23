@@ -769,6 +769,12 @@
           </div>
 
           <div class="form-group">
+            <label for="taskReminderInterval">🔔 Reminder interval (minutes)</label>
+            <input type="number" id="taskReminderInterval" min="5" max="1440" value="60" style="width:120px"/>
+            <small style="color:var(--text-dim);display:block;margin-top:4px">Assigned person is reminded at this interval until task is complete. Set 0 to disable.</small>
+          </div>
+
+          <div class="form-group">
             <label>Email Notifications</label>
             <div class="checkbox-group">
               <input type="checkbox" id="enableNotifications" onchange="toggleEmailInput()"/>
@@ -1013,7 +1019,8 @@ function onSignInSuccess(){
       toggleMobileFab(isAdmin);
 
       loadToggleStates();
-      loadTasks();
+      loadTasks().then(()=>scheduleAllReminders());
+      requestNotificationPermission();
     })
     .catch(err=>{
       console.error('userinfo error:', err);
@@ -1065,12 +1072,12 @@ async function loadTasks(){
   todoList.innerHTML = '<div class="loading">Loading tasks...</div>';
   try{
     const response = await gapi.client.sheets.spreadsheets.values.get({
-      spreadsheetId: SHEET_ID, range: 'Untitled!A2:M'
+      spreadsheetId: SHEET_ID, range: 'Untitled!A2:O'
     });
     const rows = response.result.values || [];
     // Sheet columns: A=Task B=Description C=Priority D=DueDate E=DueTime
     //   F=AssignedTo G=Completed H=CompletedBy I=DateCompleted J=Notify
-    //   K=NotificationEmails L=Category M=Comments
+    //   K=NotificationEmails L=Category M=Comments N=ReminderInterval O=Status
     allTasks = rows.map((row,idx)=>({
       id: idx+2,
       task: row[0]||'',
@@ -1085,7 +1092,9 @@ async function loadTasks(){
       notificationEmails: row[10]||'',
       category: row[11]||'',
       comments: row[12]||'',
-      createdBy: ''   // Not a column in this sheet
+      reminderInterval: parseInt(row[13])||60,  // minutes, default 60
+      status: row[14]||'',                       // '' | 'IN_PROGRESS' | 'COMPLETE'
+      createdBy: ''
     })).filter(t=>t.task.trim() && !t.completed);
 
     const order = {High:1, Medium:2, Low:3};
@@ -1230,6 +1239,7 @@ function renderTasks(){
                 ${t.category ? `<span class="badge category-badge">${t.category}</span>`:''}
                 ${t.notify ? '<span class="badge notification-badge">🔔 Notify</span>':''}
                 ${overdue ? '<span class="badge overdue-badge">⚠️ Overdue</span>':''}
+                ${t.status==='IN_PROGRESS' ? '<span class="badge" style="background:rgba(200,120,32,.2);color:#E09050;border:1px solid rgba(200,120,32,.35)">🔄 In Progress</span>':''}
               </div>
               ${t.description ? `<div class="todo-description">${t.description}</div>`:''}
               <div class="todo-meta">
@@ -1243,6 +1253,7 @@ function renderTasks(){
                   <button class="btn btn-small btn-info" onclick="openEditTask(${t.id})">✏️ Edit</button>
                   <button class="btn btn-small btn-danger" onclick="deleteTask(${t.id})">🗑️ Delete</button>` : ''
                 }
+                <button class="btn btn-small ${t.status==='IN_PROGRESS'?'btn-warning':''}" onclick="markInProgress(${t.id})" title="Mark as In Progress">🔄 ${t.status==='IN_PROGRESS'?'In Progress':'Working on it'}</button>
                 <button class="btn btn-small" onclick="toggleComments(${t.id})">💬 Comments</button>
               </div>
               <div class="comments-section" id="comments-${t.id}" style="display:none;">
@@ -1298,6 +1309,106 @@ function sendNotification(task,completedBy,dateCompleted){
   console.log('📧 Notify:', emails, {task:task.task,completedBy,dateCompleted});
 }
 
+async function markInProgress(taskId){
+  const task = allTasks.find(t=>t.id===taskId);
+  if(!task) return;
+  const newStatus = task.status==='IN_PROGRESS' ? '' : 'IN_PROGRESS';
+  try{
+    await gapi.client.sheets.spreadsheets.values.update({
+      spreadsheetId:SHEET_ID, range:`Untitled!O${taskId}`, valueInputOption:'RAW',
+      resource:{ values:[[newStatus]] }
+    });
+    task.status = newStatus;
+    renderTasks();
+    scheduleRemindersForTask(task);
+  }catch(err){
+    alert('Error updating status: '+(err?.result?.error?.message||err?.message||JSON.stringify(err)));
+  }
+}
+
+// ============================================================
+// PUSH NOTIFICATION REMINDERS
+// ============================================================
+let reminderTimers = {};
+
+function scheduleRemindersForTask(task){
+  // Cancel any existing timer for this task
+  if(reminderTimers[task.id]) clearInterval(reminderTimers[task.id]);
+  if(task.status !== 'IN_PROGRESS') return;
+  if(!task.assignedTo || !currentUser) return;
+  // Only remind if the current user is the assigned person (or admin)
+  const myName = currentUser.name||'';
+  const assigned = task.assignedTo||'';
+  if(!isAdmin && assigned.toLowerCase() !== myName.toLowerCase()) return;
+  const intervalMs = (parseInt(task.reminderInterval)||60) * 60 * 1000;
+  if(intervalMs <= 0) return;
+
+  reminderTimers[task.id] = setInterval(async ()=>{
+    const stillTask = allTasks.find(t=>t.id===task.id);
+    if(!stillTask || stillTask.status !== 'IN_PROGRESS'){
+      clearInterval(reminderTimers[task.id]); return;
+    }
+    showInPageReminder(stillTask);
+  }, intervalMs);
+}
+
+function showInPageReminder(task){
+  // Create a dismissible banner reminder
+  const existing = document.getElementById(`reminder-${task.id}`);
+  if(existing) return; // already showing
+  const banner = document.createElement('div');
+  banner.id = `reminder-${task.id}`;
+  banner.style.cssText='position:fixed;top:70px;right:16px;z-index:9999;background:var(--accent);color:#fff;padding:16px 20px;border-radius:12px;box-shadow:0 4px 20px rgba(0,0,0,.4);max-width:340px;font-size:14px;';
+  banner.innerHTML=`
+    <div style="font-weight:700;margin-bottom:8px">🔔 Task Reminder</div>
+    <div style="margin-bottom:12px"><strong>${task.task}</strong><br><small>Assigned to: ${task.assignedTo}</small></div>
+    <div style="display:flex;gap:8px;">
+      <button onclick="reminderComplete(${task.id})" style="flex:1;padding:7px;background:#4caf50;color:#fff;border:none;border-radius:7px;cursor:pointer;font-weight:600">✅ Done</button>
+      <button onclick="reminderStillWorking(${task.id})" style="flex:1;padding:7px;background:rgba(255,255,255,.2);color:#fff;border:none;border-radius:7px;cursor:pointer">🔄 Still on it</button>
+    </div>`;
+  document.body.appendChild(banner);
+  // Also try browser notification
+  if(Notification.permission === 'granted'){
+    const n = new Notification('🔔 Task Reminder — '+task.task,{
+      body:'Are you done? Tap to open the task list.',
+      icon:'/Theatre-To-Do-List/favicon.ico'
+    });
+    n.onclick = ()=>{ window.focus(); n.close(); };
+  }
+}
+
+async function reminderComplete(taskId){
+  document.getElementById(`reminder-${taskId}`)?.remove();
+  clearInterval(reminderTimers[taskId]);
+  // Mark complete using initials prompt
+  const initials = prompt('Enter your initials to mark complete:');
+  if(!initials) return;
+  const today = new Date().toISOString().split('T')[0];
+  try{
+    await gapi.client.sheets.spreadsheets.values.update({
+      spreadsheetId:SHEET_ID, range:`Untitled!G${taskId}:O${taskId}`, valueInputOption:'RAW',
+      resource:{ values:[['TRUE', initials, today,'','','','COMPLETE']] }
+    });
+    const idx=allTasks.findIndex(t=>t.id===taskId); if(idx!==-1) allTasks.splice(idx,1);
+    renderTasks(); updateStats();
+  }catch(err){ alert('Error: '+(err?.result?.error?.message||err?.message||JSON.stringify(err))); }
+}
+
+function reminderStillWorking(taskId){
+  document.getElementById(`reminder-${taskId}`)?.remove();
+  // Will fire again after the interval
+}
+
+function requestNotificationPermission(){
+  if('Notification' in window && Notification.permission === 'default'){
+    Notification.requestPermission();
+  }
+}
+
+function scheduleAllReminders(){
+  allTasks.filter(t=>t.status==='IN_PROGRESS').forEach(scheduleRemindersForTask);
+}
+
 // ----- Modal / save / delete / comments -----
 function openTaskModal(){
   if(!isAdmin) return alert('Only administrators can create tasks.');
@@ -1342,6 +1453,7 @@ function openEditTask(taskId){
     notificationEmails=t.notificationEmails.split(',').map(e=>e.trim());
     document.getElementById('emailInputGroup').classList.add('active'); renderEmailTags();
   }
+  document.getElementById('taskReminderInterval').value = t.reminderInterval||60;
   document.getElementById('taskModal').style.display='block';
 }
 
@@ -1370,23 +1482,26 @@ async function saveTask(e){
 
   if(!title) return alert('Please enter a task title!');
 
-  // Sheet columns A–M: Task, Description, Priority, DueDate, DueTime,
-  //   AssignedTo, Completed, CompletedBy, DateCompleted, Notify, NotificationEmails, Category, Comments
-  const rowData = (comments) => [
+  const reminderMins = parseInt(document.getElementById('taskReminderInterval')?.value)||60;
+  // Sheet columns A–O: Task, Description, Priority, DueDate, DueTime,
+  //   AssignedTo, Completed, CompletedBy, DateCompleted, Notify, NotificationEmails, Category, Comments, ReminderInterval, Status
+  const rowData = (comments, status='') => [
     title, description, priority, dueDate, dueTime,
     assignedTo, 'FALSE', '', '',
-    notify?'TRUE':'FALSE', emails, category, comments
+    notify?'TRUE':'FALSE', emails, category, comments,
+    reminderMins, status
   ];
 
   try{
     if(editingTaskId){
+      const existing = allTasks.find(t=>t.id===editingTaskId);
       await gapi.client.sheets.spreadsheets.values.update({
-        spreadsheetId:SHEET_ID, range:`Untitled!A${editingTaskId}:M${editingTaskId}`, valueInputOption:'RAW',
-        resource:{ values:[rowData(taskComments[editingTaskId]||'')] }
+        spreadsheetId:SHEET_ID, range:`Untitled!A${editingTaskId}:O${editingTaskId}`, valueInputOption:'RAW',
+        resource:{ values:[rowData(taskComments[editingTaskId]||'', existing?.status||'')] }
       });
     }else{
       await gapi.client.sheets.spreadsheets.values.append({
-        spreadsheetId:SHEET_ID, range:'Untitled!A:M', valueInputOption:'RAW',
+        spreadsheetId:SHEET_ID, range:'Untitled!A:O', valueInputOption:'RAW',
         insertDataOption:'INSERT_ROWS',
         resource:{ values:[rowData('')] }
       });
@@ -1407,8 +1522,8 @@ async function deleteTask(taskId){
   if(!confirm('Are you sure you want to delete this task?')) return;
   try{
     await gapi.client.sheets.spreadsheets.values.update({
-      spreadsheetId:SHEET_ID, range:`Untitled!A${taskId}:M${taskId}`, valueInputOption:'RAW',
-      resource:{ values:[['','','','','','','','','','','','','']] }
+      spreadsheetId:SHEET_ID, range:`Untitled!A${taskId}:O${taskId}`, valueInputOption:'RAW',
+      resource:{ values:[['','','','','','','','','','','','','','','']] }
     });
     const list=document.getElementById('todoList'); const msg=document.createElement('div');
     msg.className='success'; msg.textContent='✅ Task deleted successfully!'; list.insertBefore(msg,list.firstChild);
@@ -1524,6 +1639,93 @@ function loadToggleStates(){
 
 // --- Printer settings helpers ---
 function openPrinterSettings(){
+  showPrintWhoDialog();
+}
+
+// Who is printing dialog — shown before printer settings
+function showPrintWhoDialog(){
+  const existing = document.getElementById('printWhoModal');
+  if(existing) existing.remove();
+
+  // Gather unique assignees
+  const assigneeSet = new Set(allTasks.map(t=>t.assignedTo).filter(a=>a));
+  const assigneeOptions = [...assigneeSet].map(a=>`<option value="${a}">${a}</option>`).join('');
+
+  const modal = document.createElement('div');
+  modal.id = 'printWhoModal';
+  modal.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:10000;display:flex;align-items:center;justify-content:center';
+  const printerName = currentUser?.name || '';
+  modal.innerHTML=`
+    <div style="background:var(--surface);border-radius:16px;padding:28px;min-width:320px;max-width:440px;width:90%;box-shadow:0 8px 40px rgba(0,0,0,.5)">
+      <h3 style="margin:0 0 20px;font-size:1.2rem">🖨️ Print Tasks</h3>
+      <div style="margin-bottom:14px">
+        <label style="font-size:.85rem;color:var(--text-dim);display:block;margin-bottom:5px">Who is printing?</label>
+        <input id="printWhoName" type="text" value="${printerName}" placeholder="Your name" style="width:100%;padding:9px 12px;border-radius:8px;border:1px solid var(--border);background:var(--bg);color:var(--text);font-size:1rem;box-sizing:border-box"/>
+      </div>
+      <div style="margin-bottom:14px">
+        <label style="font-size:.85rem;color:var(--text-dim);display:block;margin-bottom:5px">Print tasks assigned to:</label>
+        <select id="printWhoFilter" style="width:100%;padding:9px 12px;border-radius:8px;border:1px solid var(--border);background:var(--bg);color:var(--text);font-size:1rem">
+          <option value="all">Everyone (all tasks)</option>
+          <option value="printer" selected>Me (printer's name)</option>
+          ${assigneeOptions}
+          <option value="unassigned">Unassigned only</option>
+        </select>
+      </div>
+      <div style="margin-bottom:20px">
+        <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:.9rem">
+          <input type="checkbox" id="printAutoAssign" checked style="width:16px;height:16px"/>
+          Auto-assign unassigned tasks to printer
+        </label>
+      </div>
+      <div style="display:flex;gap:10px;justify-content:flex-end">
+        <button onclick="document.getElementById('printWhoModal').remove()" style="padding:9px 18px;border-radius:8px;border:1px solid var(--border);background:transparent;color:var(--text);cursor:pointer">Cancel</button>
+        <button onclick="confirmPrintWho()" style="padding:9px 18px;border-radius:8px;border:none;background:var(--accent);color:#fff;cursor:pointer;font-weight:600">Continue →</button>
+      </div>
+    </div>`;
+  document.body.appendChild(modal);
+  document.getElementById('printWhoName').focus();
+}
+
+async function confirmPrintWho(){
+  const printerName = document.getElementById('printWhoName').value.trim();
+  const filterVal = document.getElementById('printWhoFilter').value;
+  const autoAssign = document.getElementById('printAutoAssign').checked;
+  document.getElementById('printWhoModal').remove();
+
+  if(!printerName){ alert('Please enter your name.'); showPrintWhoDialog(); return; }
+
+  // Auto-assign unassigned tasks to the printer
+  if(autoAssign){
+    const unassigned = allTasks.filter(t=>!t.assignedTo);
+    for(const task of unassigned){
+      try{
+        await gapi.client.sheets.spreadsheets.values.update({
+          spreadsheetId:SHEET_ID, range:`Untitled!F${task.id}`, valueInputOption:'RAW',
+          resource:{ values:[[printerName]] }
+        });
+        task.assignedTo = printerName;
+      }catch(e){ console.warn('Could not auto-assign task', task.id, e); }
+    }
+  }
+
+  // Build the filtered task list to print
+  let printTasks;
+  if(filterVal === 'all'){
+    printTasks = allTasks;
+  } else if(filterVal === 'printer'){
+    printTasks = allTasks.filter(t=>t.assignedTo.toLowerCase()===printerName.toLowerCase() || !t.assignedTo);
+  } else if(filterVal === 'unassigned'){
+    printTasks = allTasks.filter(t=>!t.assignedTo);
+  } else {
+    printTasks = allTasks.filter(t=>t.assignedTo===filterVal);
+  }
+
+  if(!printTasks.length){ alert('No tasks match the selected filter.'); return; }
+
+  // Store for printReceipt to use
+  window._printTaskOverride = printTasks;
+  window._printPrinterName = printerName;
+
   loadPrinterSettingsToUI();
   document.getElementById('printerModal').style.display='block';
 }
@@ -1663,8 +1865,15 @@ async function printReceipt(){
   let s={};
   try{ s=JSON.parse(localStorage.getItem('printerSettings')||'{}'); }catch(e){}
 
-  const scope = s.receiptScope||'filtered';
-  const tasklist = scope==='all' ? allTasks : tasks;
+  // Use override from print-who dialog if present, else fall back to scope setting
+  let tasklist;
+  if(window._printTaskOverride && window._printTaskOverride.length){
+    tasklist = window._printTaskOverride;
+    window._printTaskOverride = null;
+  } else {
+    const scope = s.receiptScope||'filtered';
+    tasklist = scope==='all' ? allTasks : tasks;
+  }
 
   if(!tasklist.length){
     alert('No tasks to print.');
@@ -1824,9 +2033,9 @@ async function bulkDeleteSelected(){
     try{
       await gapi.client.sheets.spreadsheets.values.update({
         spreadsheetId:SHEET_ID,
-        range:`Untitled!A${taskId}:M${taskId}`,
+        range:`Untitled!A${taskId}:O${taskId}`,
         valueInputOption:'RAW',
-        resource:{ values:[['','','','','','','','','','','','','']] }
+        resource:{ values:[['','','','','','','','','','','','','','','']] }
       });
     }catch(err){ errors.push(taskId); }
   }
@@ -2313,9 +2522,31 @@ window.downloadQrCode=downloadQrCode;
 window.writeNfcTag=writeNfcTag;
 window.openScanMode=openScanMode;
 window.closeScanModal=closeScanModal;
+window.markInProgress=markInProgress;
+window.reminderComplete=reminderComplete;
+window.reminderStillWorking=reminderStillWorking;
+window.confirmPrintWho=confirmPrintWho;
 
 // auto-refresh tasks (if signed in)
 setInterval(()=>{ if(accessToken) loadTasks(); }, 120000);
+
+// ============================================================
+// SERVICE WORKER REGISTRATION
+// ============================================================
+if('serviceWorker' in navigator){
+  navigator.serviceWorker.register('/Theatre-To-Do-List/sw.js')
+    .then(reg => console.log('SW registered:', reg.scope))
+    .catch(err => console.warn('SW registration failed:', err));
+
+  // Listen for messages from service worker (notification action buttons)
+  navigator.serviceWorker.addEventListener('message', async e => {
+    if(e.data?.type === 'REMINDER_DONE' && e.data.taskId){
+      await reminderComplete(e.data.taskId);
+    } else if(e.data?.type === 'REMINDER_STILL_WORKING' && e.data.taskId){
+      reminderStillWorking(e.data.taskId);
+    }
+  });
+}
   </script>
 
   <!-- Google APIs last -->
