@@ -4,214 +4,462 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
   <title>Theatre To-Do List</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
   <style>
+    /* ── Token system: light mode base, dark mode override ── */
+    :root{
+      --black:#F0EBE0;
+      --surface:#FFFFFF;
+      --surface-raised:#F5F2ED;
+      --surface-inset:#EAE6DF;
+      --amber:#C88010;
+      --amber-dim:#A86808;
+      --steel:#6A7888;
+      --steel-dim:#8A9BAD;
+      --offwhite:#1C1A18;
+      --text:#2A2724;
+      --text-dim:#6B6560;
+      --border:#DDD9D0;
+      --high:#C94040;
+      --medium:#C87820;
+      --low:#2E68A8;
+      --success:#3A7C4C;
+      --danger:#C94040;
+      --info:#2E68A8;
+    }
+    /* Dark mode */
+    body.dark-mode{
+      --black:#0E0E10;
+      --surface:#16181C;
+      --surface-raised:#1E2128;
+      --surface-inset:#12141A;
+      --amber:#E8A020;
+      --amber-dim:#A87018;
+      --steel:#8B9CAD;
+      --steel-dim:#4A5568;
+      --offwhite:#F0EBE0;
+      --text:#D8D4CC;
+      --text-dim:#7A8494;
+      --border:#272B34;
+      --high:#C94040;
+      --medium:#C87820;
+      --low:#3E78A8;
+      --success:#4A8C5C;
+      --danger:#C94040;
+      --info:#3E78A8;
+    }
     *{margin:0;padding:0;box-sizing:border-box}
-    :root{--primary-gradient:linear-gradient(135deg,#667eea 0%,#764ba2 100%);--bg-light:#f8f9fa;--border-color:#e9ecef;--text-primary:#333;--text-secondary:#666}
-    body{font-family:'Segoe UI',Tahoma,Geneva,Verdana,sans-serif;background:var(--primary-gradient);min-height:100vh;padding:10px;transition:background .3s}
-    body.dark-mode{--bg-light:#2d3436;--border-color:#4a4a4a;--text-primary:#f8f9fa;--text-secondary:#dfe6e9;background:linear-gradient(135deg,#2d3436 0%,#1e272e 100%)}
-    body.dark-mode .container{background:#1e272e}
-    body.dark-mode .todo-item{background:#2d3436;color:var(--text-primary)}
-    body.dark-mode .modal-content{background:#2d3436;color:var(--text-primary)}
-    body.dark-mode input,body.dark-mode textarea,body.dark-mode select{background:#1e272e;color:var(--text-primary);border-color:#4a4a4a}
-    body.dark-mode .filter-section{background:#2d3436}
-    body.dark-mode .comment{background:#1e272e}
-    .container{max-width:1200px;margin:0 auto;background:#fff;border-radius:20px;box-shadow:0 20px 60px rgba(0,0,0,.3);overflow:hidden}
-    .header{background:var(--primary-gradient);color:#fff;padding:20px;text-align:center;position:relative;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap}
-    .header-left{flex:1}
-    .header h1{font-size:2em;margin-bottom:5px}
-    .header p{font-size:.9em;opacity:.9}
-    .header-right{display:flex;gap:10px;align-items:center}
-    .dark-mode-toggle{background:rgba(255,255,255,.2);border:none;color:#fff;padding:8px 12px;border-radius:20px;cursor:pointer;font-size:1.2em;transition:background .3s}
-    .dark-mode-toggle:hover{background:rgba(255,255,255,.3)}
-    .user-info{display:flex;align-items:center;gap:10px;background:rgba(255,255,255,.2);padding:8px 12px;border-radius:25px;font-size:.85em}
-    .user-avatar{width:32px;height:32px;border-radius:50%;border:2px solid #fff;object-fit:cover}
-    .sign-out-btn{background:rgba(255,255,255,.3);color:#fff;border:none;padding:6px 12px;border-radius:15px;cursor:pointer;font-size:.85em;transition:background .3s}
-    .sign-out-btn:hover{background:rgba(255,255,255,.4)}
-    .login-screen{padding:60px 30px;text-align:center}
-    .login-screen h2{color:var(--text-primary);margin-bottom:20px;font-size:2em}
-    .login-screen p{color:var(--text-secondary);margin-bottom:30px;font-size:1.1em}
-    .remember-me{display:flex;align-items:center;justify-content:center;gap:8px;margin:20px 0;font-size:.95em;color:var(--text-secondary)}
-    .remember-me input[type="checkbox"]{width:18px;height:18px;cursor:pointer}
+    body{
+      font-family:'DM Sans',system-ui,sans-serif;
+      background:var(--black);
+      color:var(--text);
+      min-height:100vh;
+      padding:12px;
+      transition:background .25s,color .25s;
+      font-size:15px;
+      line-height:1.5;
+    }
+    /* ── Layout shell ── */
+    .container{
+      max-width:960px;
+      margin:0 auto;
+      background:var(--surface);
+      border:1px solid var(--border);
+      border-radius:12px;
+      overflow:hidden;
+    }
+    /* ── Header ── */
+    .header{
+      background:var(--surface-inset);
+      border-bottom:1px solid var(--border);
+      padding:14px 20px;
+      display:flex;
+      justify-content:space-between;
+      align-items:center;
+      flex-wrap:wrap;
+      gap:12px;
+    }
+    .header-left{flex:1;min-width:0}
+    .header h1{
+      font-size:1.1em;
+      font-weight:600;
+      color:var(--offwhite);
+      display:flex;
+      align-items:center;
+      gap:8px;
+      letter-spacing:-.01em;
+    }
+    .header h1 .curtain{color:var(--amber);font-style:normal}
+    .header p{font-size:.8em;color:var(--text-dim);margin-top:1px}
+    .header-right{display:flex;gap:8px;align-items:center}
+    .dark-mode-toggle{
+      background:var(--surface-raised);
+      border:1px solid var(--border);
+      color:var(--text);
+      padding:6px 10px;
+      border-radius:6px;
+      cursor:pointer;
+      font-size:1em;
+      transition:border-color .2s;
+    }
+    .dark-mode-toggle:hover{border-color:var(--steel)}
+    .user-info{
+      display:flex;
+      align-items:center;
+      gap:8px;
+      font-size:.82em;
+      color:var(--text-dim);
+    }
+    .user-avatar{width:28px;height:28px;border-radius:50%;border:1px solid var(--border);object-fit:cover}
+    .sign-out-btn{
+      background:transparent;
+      color:var(--text-dim);
+      border:1px solid var(--border);
+      padding:4px 10px;
+      border-radius:5px;
+      cursor:pointer;
+      font-size:.82em;
+      transition:color .2s,border-color .2s;
+    }
+    .sign-out-btn:hover{color:var(--text);border-color:var(--steel)}
+    /* ── Login ── */
+    .login-screen{padding:64px 32px;text-align:center}
+    .login-screen h2{
+      color:var(--offwhite);
+      margin-bottom:10px;
+      font-size:1.5em;
+      font-weight:600;
+    }
+    .login-screen p{color:var(--text-dim);margin-bottom:28px;font-size:.95em;max-width:400px;margin-left:auto;margin-right:auto}
+    .remember-me{
+      display:flex;align-items:center;justify-content:center;
+      gap:8px;margin:18px 0;font-size:.88em;color:var(--text-dim);
+    }
+    .remember-me input[type="checkbox"]{width:16px;height:16px;cursor:pointer;accent-color:var(--amber)}
     .remember-me label{cursor:pointer;user-select:none}
-    .google-signin-btn{display:inline-flex;align-items:center;gap:12px;background:#fff;color:#444;border:2px solid #ddd;padding:12px 24px;border-radius:8px;font-size:1.1em;font-weight:600;cursor:pointer;transition:all .3s;box-shadow:0 2px 4px rgba(0,0,0,.1)}
-    .google-signin-btn:hover{box-shadow:0 4px 12px rgba(0,0,0,.15);transform:translateY(-2px)}
-    .google-icon{width:24px;height:24px}
-    .action-bar{padding:20px;background:var(--bg-light);border-bottom:2px solid var(--border-color);display:flex;gap:10px;flex-wrap:wrap;align-items:center}
-    .export-buttons{display:flex;gap:10px;flex-wrap:wrap;transition:all .3s ease}
+    .google-signin-btn{
+      display:inline-flex;align-items:center;gap:10px;
+      background:var(--surface-raised);color:var(--text);
+      border:1px solid var(--border);
+      padding:12px 22px;border-radius:7px;
+      font-size:1em;font-weight:500;cursor:pointer;
+      transition:border-color .2s,box-shadow .2s;
+      font-family:inherit;
+    }
+    .google-signin-btn:hover{border-color:var(--steel);box-shadow:0 2px 8px rgba(0,0,0,.25)}
+    .google-icon{width:20px;height:20px}
+    /* ── Stats bar ── */
+    .stats{
+      display:flex;border-bottom:1px solid var(--border);
+      background:var(--surface-inset);
+    }
+    .stat-item{
+      flex:1;text-align:center;padding:12px 8px;
+      border-right:1px solid var(--border);
+    }
+    .stat-item:last-child{border-right:none}
+    .stat-number{
+      font-size:1.6em;font-weight:600;
+      color:var(--amber);letter-spacing:-.02em;
+      font-variant-numeric:tabular-nums;
+    }
+    .stat-label{font-size:.75em;color:var(--text-dim);margin-top:1px}
+    /* ── Action bar ── */
+    .action-bar{
+      padding:12px 16px;
+      border-bottom:1px solid var(--border);
+      display:flex;gap:8px;flex-wrap:wrap;align-items:center;
+      background:var(--surface-raised);
+    }
+    .export-buttons{display:flex;gap:8px;flex-wrap:wrap}
     .export-buttons.hidden{display:none}
-    .toggle-section-btn{background:#6c757d;padding:8px 16px;font-size:.9em}
-    .toggle-section-btn:hover{background:#5a6268}
-    .search-box{flex:1;min-width:200px;padding:10px 15px;border:2px solid var(--border-color);border-radius:8px;font-size:.95em}
-    .btn{background:var(--primary-gradient);color:#fff;border:none;padding:10px 20px;border-radius:8px;font-size:.95em;cursor:pointer;transition:all .2s;font-weight:600;display:inline-flex;align-items:center;gap:8px;white-space:nowrap}
-    .btn:hover{transform:translateY(-2px);box-shadow:0 5px 15px rgba(102,126,234,.4)}
-    .btn-success{background:linear-gradient(135deg,#4caf50 0%,#388e3c 100%)}
-    .btn-danger{background:linear-gradient(135deg,#f44336 0%,#c62828 100%)}
-    .btn-warning{background:linear-gradient(135deg,#ff9800 0%,#f57c00 100%)}
-    .btn-info{background:linear-gradient(135deg,#2196f3 0%,#1976d2 100%)}
-    .btn-small{padding:6px 12px;font-size:.85em}
-    .filter-section{padding:15px 20px;background:#fff;border-bottom:1px solid var(--border-color);display:flex;gap:10px;flex-wrap:wrap;align-items:center;transition:all .3s ease;overflow:hidden;max-height:200px}
-    .filter-section.collapsed{max-height:0;padding:0 20px;border-bottom:none}
+    .search-box{
+      flex:1;min-width:180px;
+      padding:8px 12px;
+      border:1px solid var(--border);
+      border-radius:6px;
+      font-size:.9em;
+      background:var(--surface-inset);
+      color:var(--text);
+      font-family:inherit;
+      transition:border-color .2s;
+    }
+    .search-box:focus{outline:none;border-color:var(--amber)}
+    .search-box::placeholder{color:var(--text-dim)}
+    /* ── Buttons ── */
+    .btn{
+      background:var(--surface);border:1px solid var(--border);
+      color:var(--text);
+      padding:8px 14px;border-radius:6px;
+      font-size:.85em;cursor:pointer;
+      font-weight:500;font-family:inherit;
+      display:inline-flex;align-items:center;gap:6px;
+      white-space:nowrap;transition:border-color .2s,background .2s;
+    }
+    .btn:hover{border-color:var(--steel);background:var(--surface-raised)}
+    .btn-success{background:var(--success);border-color:var(--success);color:#fff}
+    .btn-success:hover{background:#3A7A4C;border-color:#3A7A4C}
+    .btn-danger{background:var(--danger);border-color:var(--danger);color:#fff}
+    .btn-danger:hover{background:#A83030;border-color:#A83030}
+    .btn-warning{background:var(--medium);border-color:var(--medium);color:#fff}
+    .btn-warning:hover{background:#A86010;border-color:#A86010}
+    .btn-info{background:var(--info);border-color:var(--info);color:#fff}
+    .btn-info:hover{background:#2E60A0;border-color:#2E60A0}
+    .btn-small{padding:5px 10px;font-size:.8em}
+    .toggle-section-btn{color:var(--text-dim)}
+    /* ── Filter section ── */
+    .filter-section{
+      padding:12px 16px;background:var(--surface);
+      border-bottom:1px solid var(--border);
+      display:flex;gap:12px;flex-wrap:wrap;align-items:center;
+      transition:max-height .25s,padding .25s,opacity .25s;
+      overflow:hidden;max-height:200px;opacity:1;
+    }
+    .filter-section.collapsed{max-height:0;padding:0 16px;border-bottom:none;opacity:0}
     .filter-group{display:flex;align-items:center;gap:6px}
-    .filter-group label{font-weight:600;color:var(--text-secondary);font-size:.9em}
-    .filter-group select{padding:6px 10px;border:2px solid var(--border-color);border-radius:6px;font-size:.85em}
-    .todo-list{padding:20px;max-height:600px;overflow-y:auto}
-    .todo-item{background:var(--bg-light);border-left:4px solid #667eea;padding:15px;margin-bottom:12px;border-radius:8px;transition:all .3s;position:relative}
-    .todo-item:hover{box-shadow:0 5px 15px rgba(0,0,0,.1);transform:translateX(5px)}
-    .todo-item.priority-high{border-left-color:#f44336;background:linear-gradient(135deg,#ffebee 0%,#ffcdd2 100%)}
-    .todo-item.priority-medium{border-left-color:#ff9800;background:linear-gradient(135deg,#fff3e0 0%,#ffe0b2 100%)}
-    .todo-item.priority-low{border-left-color:#2196f3;background:linear-gradient(135deg,#e3f2fd 0%,#bbdefb 100%)}
-    body.dark-mode .todo-item.priority-high{background:linear-gradient(135deg,#5d1f1f 0%,#7f2c2c 100%)}
-    body.dark-mode .todo-item.priority-medium{background:linear-gradient(135deg,#5d4a1f 0%,#7f6419 100%)}
-    body.dark-mode .todo-item.priority-low{background:linear-gradient(135deg,#1f3d5d 0%,#2c5f7f 100%)}
-    .todo-item-header{display:flex;justify-content:space-between;align-items:flex-start;gap:10px;margin-bottom:10px}
-    .todo-item-left{display:flex;align-items:flex-start;gap:12px;flex:1}
-    .checkbox{width:22px;height:22px;cursor:pointer;accent-color:#667eea;flex-shrink:0;margin-top:2px}
-    /* Bulk delete */
-    #bulkBar{display:none;align-items:center;gap:10px;padding:10px 16px;background:#fff3e0;border:2px solid #ff9800;border-radius:8px;margin-top:8px;flex-wrap:wrap}
+    .filter-group label{font-weight:500;color:var(--text-dim);font-size:.82em;white-space:nowrap}
+    .filter-group select{
+      padding:5px 8px;border:1px solid var(--border);border-radius:5px;
+      font-size:.82em;background:var(--surface-inset);color:var(--text);
+      font-family:inherit;
+    }
+    .filter-group select:focus{outline:none;border-color:var(--amber)}
+    /* ── Task list ── */
+    .todo-list{padding:0;max-height:65vh;overflow-y:auto}
+    .todo-list::-webkit-scrollbar{width:4px}
+    .todo-list::-webkit-scrollbar-track{background:var(--surface-inset)}
+    .todo-list::-webkit-scrollbar-thumb{background:var(--border);border-radius:2px}
+    /* ── Task row ── */
+    .todo-item{
+      border-left:3px solid var(--border);
+      padding:12px 16px 12px 14px;
+      border-bottom:1px solid var(--border);
+      transition:background .15s;
+      position:relative;
+      background:var(--surface);
+    }
+    .todo-item:last-child{border-bottom:none}
+    .todo-item:hover{background:var(--surface-raised)}
+    .todo-item.priority-high{border-left-color:var(--high)}
+    .todo-item.priority-medium{border-left-color:var(--medium)}
+    .todo-item.priority-low{border-left-color:var(--low)}
+    /* Bulk mode */
+    #bulkBar{
+      display:none;align-items:center;gap:10px;
+      padding:10px 16px;
+      background:var(--surface-inset);
+      border-bottom:1px solid var(--medium);
+      flex-wrap:wrap;
+    }
     #bulkBar.active{display:flex}
-    .bulk-select-cb{width:18px;height:18px;cursor:pointer;accent-color:#e53935;flex-shrink:0}
-    .task-select-cb{width:18px;height:18px;cursor:pointer;accent-color:#e53935;flex-shrink:0;display:none}
+    .bulk-select-cb{width:16px;height:16px;cursor:pointer;accent-color:var(--danger);flex-shrink:0}
+    .task-select-cb{width:16px;height:16px;cursor:pointer;accent-color:var(--danger);flex-shrink:0;display:none}
     body.bulk-mode .task-select-cb{display:block}
     body.bulk-mode .todo-item{cursor:pointer}
-    body.bulk-mode .todo-item.selected{background:#ffebee;border-left:4px solid #e53935}
+    body.bulk-mode .todo-item.selected{background:var(--surface-raised);border-left-color:var(--danger)}
+    /* ── Task anatomy ── */
+    .todo-item-header{display:flex;justify-content:space-between;align-items:flex-start;gap:10px;margin-bottom:6px}
+    .todo-item-left{display:flex;align-items:flex-start;gap:10px;flex:1}
+    .checkbox{width:18px;height:18px;cursor:pointer;accent-color:var(--amber);flex-shrink:0;margin-top:3px}
     .todo-content{flex:1;min-width:0}
-    .todo-title-row{display:flex;align-items:center;gap:8px;margin-bottom:4px;flex-wrap:wrap}
-    .todo-title{font-size:1.05em;font-weight:600;color:var(--text-primary);word-break:break-word}
-    .badge{padding:3px 10px;border-radius:12px;font-size:.7em;font-weight:bold;text-transform:uppercase;white-space:nowrap}
-    .priority-badge.priority-high{background:#f44336;color:#fff}
-    .priority-badge.priority-medium{background:#ff9800;color:#fff}
-    .priority-badge.priority-low{background:#2196f3;color:#fff}
-    .notification-badge{background:#9c27b0;color:#fff}
-    .category-badge{background:#00bcd4;color:#fff}
-    .overdue-badge{background:#f44336;color:#fff}
-    .todo-description{color:var(--text-secondary);font-size:.85em;margin-bottom:8px;word-break:break-word}
-    .todo-meta{display:flex;gap:12px;font-size:.8em;color:var(--text-secondary);flex-wrap:wrap;margin-bottom:8px}
-    .meta-item{display:flex;align-items:center;gap:4px;white-space:nowrap}
-    .todo-actions{display:flex;gap:6px;flex-wrap:wrap}
-    .todo-item-right{display:flex;gap:6px;flex-shrink:0;flex-wrap:wrap}
-    .initials-input{width:90px;padding:6px;border:2px solid var(--border-color);border-radius:6px;text-align:center;text-transform:uppercase;font-weight:bold;font-size:.9em}
-    .comments-section{margin-top:12px;padding-top:12px;border-top:1px solid var(--border-color)}
-    .comment{background:#fff;padding:10px;border-radius:6px;margin-bottom:8px;font-size:.85em}
-    .comment-author{font-weight:600;color:#667eea;margin-bottom:4px}
-    .comment-text{color:var(--text-secondary)}
-    .comment-input-group{display:flex;gap:8px;margin-top:8px}
-    .comment-input{flex:1;padding:8px;border:2px solid var(--border-color);border-radius:6px;font-size:.85em}
-    .loading{text-align:center;padding:40px;color:var(--text-secondary);font-size:1.1em}
-    .error{background:#ffebee;color:#c62828;padding:15px;border-radius:8px;margin:20px}
-    .success{background:#e8f5e9;color:#2e7d32;padding:10px 15px;border-radius:6px;margin:10px 0;font-size:.9em;text-align:center}
-    .stats{display:flex;gap:15px;padding:15px 20px;background:var(--primary-gradient);color:#fff}
-    .stat-item{flex:1;text-align:center}
-    .stat-number{font-size:1.8em;font-weight:bold}
-    .stat-label{font-size:.85em;opacity:.9}
-    .modal{display:none;position:fixed;z-index:1000;left:0;top:0;width:100%;height:100%;background:rgba(0,0,0,.5);animation:fadeIn .3s}
+    .todo-title-row{display:flex;align-items:center;gap:6px;margin-bottom:3px;flex-wrap:wrap}
+    .todo-title{font-size:.975em;font-weight:600;color:var(--offwhite);word-break:break-word;letter-spacing:-.01em}
+    .todo-description{color:var(--text-dim);font-size:.82em;margin-bottom:6px;word-break:break-word;line-height:1.45}
+    .todo-meta{
+      display:flex;gap:12px;font-size:.76em;color:var(--text-dim);
+      flex-wrap:wrap;margin-bottom:6px;
+      font-family:'DM Mono',monospace;
+    }
+    .meta-item{display:flex;align-items:center;gap:3px;white-space:nowrap}
+    .todo-actions{display:flex;gap:5px;flex-wrap:wrap}
+    .todo-item-right{display:flex;gap:5px;flex-shrink:0;flex-wrap:wrap}
+    /* ── Badges ── */
+    .badge{
+      padding:2px 7px;border-radius:3px;
+      font-size:.7em;font-weight:600;
+      text-transform:uppercase;letter-spacing:.04em;
+      white-space:nowrap;
+    }
+    .priority-badge.priority-high{background:rgba(201,64,64,.2);color:#E07070;border:1px solid rgba(201,64,64,.35)}
+    .priority-badge.priority-medium{background:rgba(200,120,32,.2);color:#E09050;border:1px solid rgba(200,120,32,.35)}
+    .priority-badge.priority-low{background:rgba(62,120,168,.2);color:#6898C8;border:1px solid rgba(62,120,168,.35)}
+    .notification-badge{background:rgba(130,70,160,.2);color:#9070C0;border:1px solid rgba(130,70,160,.35)}
+    .category-badge{background:rgba(30,130,160,.2);color:#50A8C0;border:1px solid rgba(30,130,160,.35)}
+    .overdue-badge{background:rgba(201,64,64,.2);color:#E07070;border:1px solid rgba(201,64,64,.35)}
+    /* ── Initials input ── */
+    .initials-input{
+      width:84px;padding:5px 8px;
+      border:1px solid var(--border);border-radius:5px;
+      text-align:center;text-transform:uppercase;
+      font-weight:600;font-size:.85em;
+      background:var(--surface-inset);color:var(--text);
+      font-family:'DM Mono',monospace;
+    }
+    /* ── Comments ── */
+    .comments-section{margin-top:10px;padding-top:10px;border-top:1px solid var(--border)}
+    .comment{background:var(--surface-inset);padding:8px 10px;border-radius:5px;margin-bottom:6px;font-size:.82em}
+    .comment-author{font-weight:600;color:var(--amber);margin-bottom:3px;font-size:.85em}
+    .comment-text{color:var(--text-dim)}
+    .comment-input-group{display:flex;gap:7px;margin-top:7px}
+    .comment-input{
+      flex:1;padding:7px 10px;border:1px solid var(--border);
+      border-radius:5px;font-size:.85em;
+      background:var(--surface-inset);color:var(--text);font-family:inherit;
+    }
+    .comment-input:focus{outline:none;border-color:var(--amber)}
+    /* ── State messages ── */
+    .loading{text-align:center;padding:48px;color:var(--text-dim);font-size:.95em}
+    .error{background:rgba(201,64,64,.12);color:#E07070;border:1px solid rgba(201,64,64,.3);padding:12px 16px;border-radius:6px;margin:16px}
+    .success{background:rgba(74,140,92,.12);color:#6AAC80;border:1px solid rgba(74,140,92,.3);padding:8px 14px;border-radius:5px;margin:8px 0;font-size:.88em;text-align:center}
+    /* ── Modal ── */
+    .modal{display:none;position:fixed;z-index:1000;left:0;top:0;width:100%;height:100%;background:rgba(0,0,0,.7);animation:fadeIn .2s}
     @keyframes fadeIn{from{opacity:0}to{opacity:1}}
-    .modal-content{background:#fff;margin:2% auto;padding:0;border-radius:12px;width:90%;max-width:700px;max-height:90vh;overflow-y:auto;animation:slideIn .3s}
-    @keyframes slideIn{from{transform:translateY(-50px);opacity:0}to{transform:translateY(0);opacity:1}}
-    .modal-header{background:var(--primary-gradient);color:#fff;padding:20px;border-radius:12px 12px 0 0;display:flex;justify-content:space-between;align-items:center}
-    .modal-header h2{margin:0;font-size:1.5em}
-    .close{color:#fff;font-size:28px;font-weight:bold;cursor:pointer;line-height:1;transition:transform .2s}
-    .close:hover{transform:scale(1.2)}
-    .modal-body{padding:25px;max-height:calc(90vh - 180px);overflow-y:auto}
-    .form-group{margin-bottom:20px}
-    .form-group label{display:block;margin-bottom:6px;font-weight:600;color:var(--text-primary)}
-    .form-group input,.form-group textarea,.form-group select{width:100%;padding:10px;border:2px solid var(--border-color);border-radius:6px;font-size:1em;font-family:inherit;transition:border-color .3s}
-    .form-group input:focus,.form-group textarea:focus,.form-group select:focus{outline:none;border-color:#667eea}
-    .form-group textarea{resize:vertical;min-height:80px}
-    .form-row{display:grid;grid-template-columns:1fr 1fr;gap:15px}
-    .checkbox-group{display:flex;align-items:center;gap:8px;padding:12px;background:var(--bg-light);border-radius:6px}
-    .checkbox-group input[type="checkbox"]{width:20px;height:20px;cursor:pointer}
-    .checkbox-group label{margin:0;cursor:pointer;font-weight:normal}
-    .notification-info{background:#e3f2fd;padding:12px;border-radius:6px;margin-top:10px;font-size:.9em;color:#1976d2}
-    body.dark-mode .notification-info{background:#1a237e;color:#90caf9}
-    .email-input-group{display:none;margin-top:10px}
+    .modal-content{
+      background:var(--surface);border:1px solid var(--border);
+      margin:3% auto;padding:0;border-radius:10px;
+      width:90%;max-width:700px;max-height:90vh;
+      overflow-y:auto;animation:slideIn .2s;
+    }
+    @keyframes slideIn{from{transform:translateY(-24px);opacity:0}to{transform:translateY(0);opacity:1}}
+    .modal-header{
+      background:var(--surface-inset);
+      border-bottom:1px solid var(--border);
+      color:var(--offwhite);padding:16px 20px;
+      border-radius:10px 10px 0 0;
+      display:flex;justify-content:space-between;align-items:center;
+    }
+    .modal-header h2{margin:0;font-size:1.05em;font-weight:600}
+    .close{
+      color:var(--text-dim);font-size:22px;font-weight:400;
+      cursor:pointer;line-height:1;transition:color .2s;
+    }
+    .close:hover{color:var(--text)}
+    .modal-body{padding:20px;max-height:calc(90vh - 160px);overflow-y:auto}
+    .form-group{margin-bottom:16px}
+    .form-group label{display:block;margin-bottom:5px;font-weight:500;color:var(--text);font-size:.88em}
+    .form-group input,.form-group textarea,.form-group select{
+      width:100%;padding:9px 11px;
+      border:1px solid var(--border);border-radius:6px;
+      font-size:.9em;font-family:inherit;
+      background:var(--surface-inset);color:var(--text);
+      transition:border-color .2s;
+    }
+    .form-group input:focus,.form-group textarea:focus,.form-group select:focus{outline:none;border-color:var(--amber)}
+    .form-group textarea{resize:vertical;min-height:80px;line-height:1.5}
+    .form-row{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+    .checkbox-group{
+      display:flex;align-items:center;gap:8px;
+      padding:10px 12px;background:var(--surface-inset);border-radius:6px;
+      border:1px solid var(--border);
+    }
+    .checkbox-group input[type="checkbox"]{width:18px;height:18px;cursor:pointer;accent-color:var(--amber)}
+    .checkbox-group label{margin:0;cursor:pointer;font-weight:400;font-size:.9em}
+    .notification-info{
+      background:rgba(62,120,168,.1);border:1px solid rgba(62,120,168,.25);
+      padding:10px 12px;border-radius:6px;margin-top:8px;font-size:.85em;color:#6898C8;
+    }
+    .email-input-group{display:none;margin-top:8px}
     .email-input-group.active{display:block}
-    .email-tags{display:flex;flex-wrap:wrap;gap:8px;margin-top:8px}
-    .email-tag{background:#667eea;color:#fff;padding:6px 12px;border-radius:20px;font-size:.85em;display:flex;align-items:center;gap:6px}
-    .email-tag .remove{cursor:pointer;font-weight:bold}
-    .file-upload-area{border:2px dashed var(--border-color);border-radius:8px;padding:20px;text-align:center;cursor:pointer;transition:all .3s;background:var(--bg-light)}
-    .file-upload-area:hover{border-color:#667eea}
-    .file-upload-area.dragover{border-color:#667eea;background:#e3f2fd}
+    .email-tags{display:flex;flex-wrap:wrap;gap:6px;margin-top:7px}
+    .email-tag{
+      background:rgba(62,120,168,.2);color:#6898C8;
+      border:1px solid rgba(62,120,168,.3);
+      padding:4px 10px;border-radius:4px;font-size:.82em;
+      display:flex;align-items:center;gap:5px;
+    }
+    .email-tag .remove{cursor:pointer;font-weight:bold;opacity:.7}
+    .email-tag .remove:hover{opacity:1}
+    .file-upload-area{
+      border:1px dashed var(--border);border-radius:7px;padding:20px;
+      text-align:center;cursor:pointer;transition:border-color .2s;
+      background:var(--surface-inset);color:var(--text-dim);font-size:.88em;
+    }
+    .file-upload-area:hover{border-color:var(--amber)}
+    .file-upload-area.dragover{border-color:var(--amber);background:rgba(232,160,32,.05)}
     .file-list{margin-top:10px}
-    .file-item{display:flex;justify-content:space-between;align-items:center;padding:8px;background:var(--bg-light);border-radius:6px;margin-bottom:6px;font-size:.85em}
-    .file-item-name{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-    .file-item-remove{cursor:pointer;color:#f44336;font-weight:bold;padding:0 8px}
-    .modal-footer{padding:20px 25px;border-top:1px solid var(--border-color);display:flex;gap:10px;justify-content:flex-end;flex-wrap:wrap}
-    .btn-cancel{background:#6c757d}
+    .file-item{
+      display:flex;justify-content:space-between;align-items:center;
+      padding:7px 10px;background:var(--surface-inset);border-radius:5px;
+      margin-bottom:5px;font-size:.82em;border:1px solid var(--border);
+    }
+    .file-item-name{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--text)}
+    .file-item-remove{cursor:pointer;color:var(--danger);font-weight:bold;padding:0 6px;opacity:.7}
+    .file-item-remove:hover{opacity:1}
+    .modal-footer{
+      padding:14px 20px;border-top:1px solid var(--border);
+      display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap;
+      background:var(--surface-inset);border-radius:0 0 10px 10px;
+    }
+    .btn-cancel{background:transparent;color:var(--text-dim)}
+    .btn-cancel:hover{background:var(--surface-raised);border-color:var(--steel)}
     #mainContent{display:none}
-
-    /* Mobile FAB for Create Task */
+    /* ── Mobile FAB ── */
     .fab-create{
-      position: fixed;
-      right: 18px;
-      bottom: calc(18px + env(safe-area-inset-bottom, 0));
-      width: 56px;
-      height: 56px;
-      border-radius: 50%;
-      border: none;
-      display: none;
-      align-items: center;
-      justify-content: center;
-      font-size: 28px;
-      color: #fff;
-      background: linear-gradient(135deg,#4caf50 0%,#388e3c 100%);
-      box-shadow: 0 10px 24px rgba(0,0,0,.25);
-      z-index: 1200;
-      cursor: pointer;
+      position:fixed;right:16px;
+      bottom:calc(16px + env(safe-area-inset-bottom, 0));
+      width:52px;height:52px;border-radius:50%;border:none;
+      display:none;align-items:center;justify-content:center;
+      font-size:26px;color:#fff;
+      background:var(--success);
+      box-shadow:0 4px 16px rgba(0,0,0,.4);
+      z-index:1200;cursor:pointer;
     }
-    .fab-create:active{ transform: translateY(1px); }
-    @media (max-width: 768px){
-      .fab-create.show{ display: flex; }
-    }
-
+    .fab-create:active{transform:scale(.96)}
     @media (max-width:768px){
-      .header{flex-direction:column;gap:10px}
-      .header h1{font-size:1.5em}
-      .header-right{width:100%;justify-content:center}
+      .fab-create.show{display:flex}
+      .header{flex-direction:column;gap:8px;align-items:flex-start}
+      .header-right{width:100%}
       .action-bar{flex-direction:column;align-items:stretch}
       .search-box{width:100%}
       .btn{width:100%;justify-content:center}
       .filter-section{flex-direction:column;align-items:stretch}
       .filter-group{flex-direction:column;align-items:stretch}
       .filter-group select{width:100%}
-      .stats{flex-direction:column;gap:10px}
+      .stats{gap:0}
       .todo-item-header{flex-direction:column}
       .todo-item-right{width:100%;justify-content:flex-start}
       .form-row{grid-template-columns:1fr}
-      .modal-content{width:95%;margin:10px auto}
+      .modal-content{width:96%;margin:8px auto}
       .modal-footer{flex-direction:column}
       .modal-footer .btn{width:100%}
     }
     @media (max-width:480px){
-      body{padding:5px}
-      .container{border-radius:10px}
-      .header{padding:15px}
-      .action-bar,.filter-section,.todo-list{padding:15px}
+      body{padding:0}
+      .container{border-radius:0;border-left:none;border-right:none;min-height:100vh}
     }
-
-    /* ---- Receipt printer modal ---- */
+    /* ── Printer modal ── */
     #printerModal .modal-content{max-width:480px}
-    .printer-method-tabs{display:flex;gap:0;border-bottom:2px solid var(--border-color);margin-bottom:20px}
-    .printer-method-tab{flex:1;padding:10px;text-align:center;cursor:pointer;font-weight:600;font-size:.9em;border-bottom:3px solid transparent;transition:all .2s;color:var(--text-secondary)}
-    .printer-method-tab.active{border-bottom-color:#667eea;color:#667eea}
+    .printer-method-tabs{display:flex;border-bottom:1px solid var(--border);margin-bottom:16px}
+    .printer-method-tab{
+      flex:1;padding:9px;text-align:center;cursor:pointer;
+      font-weight:500;font-size:.85em;
+      border-bottom:2px solid transparent;margin-bottom:-1px;
+      transition:color .2s,border-color .2s;color:var(--text-dim);
+    }
+    .printer-method-tab.active{border-bottom-color:var(--amber);color:var(--amber)}
     .printer-panel{display:none}.printer-panel.active{display:block}
-    .printer-status{padding:10px 14px;border-radius:6px;font-size:.88em;margin-top:12px;display:none}
-    .printer-status.ok{background:#e8f5e9;color:#2e7d32;display:block}
-    .printer-status.err{background:#ffebee;color:#c62828;display:block}
-    .printer-status.info{background:#e3f2fd;color:#1565c0;display:block}
-
-    /* ---- QR / NFC pairing ---- */
-    #qrDisplayModal .modal-content{max-width:400px;text-align:center}
-    #qrCanvas{margin:16px auto;display:block;border:4px solid #667eea;border-radius:8px}
-    .qr-url-display{font-family:'Courier New',monospace;font-size:.78em;word-break:break-all;background:var(--bg-light);padding:8px;border-radius:6px;margin:8px 0;color:var(--text-secondary)}
+    .printer-status{padding:9px 12px;border-radius:5px;font-size:.85em;margin-top:10px;display:none}
+    .printer-status.ok{background:rgba(74,140,92,.12);color:#6AAC80;border:1px solid rgba(74,140,92,.3);display:block}
+    .printer-status.err{background:rgba(201,64,64,.12);color:#E07070;border:1px solid rgba(201,64,64,.3);display:block}
+    .printer-status.info{background:rgba(62,120,168,.1);color:#6898C8;border:1px solid rgba(62,120,168,.25);display:block}
+    /* ── QR / NFC pairing ── */
+    #qrDisplayModal .modal-content{max-width:380px;text-align:center}
+    #qrCanvas{margin:14px auto;display:block;border:2px solid var(--border);border-radius:6px}
+    .qr-url-display{
+      font-family:'DM Mono',monospace;font-size:.75em;word-break:break-all;
+      background:var(--surface-inset);border:1px solid var(--border);
+      padding:7px 10px;border-radius:5px;margin:7px 0;color:var(--text-dim);
+    }
     .nfc-animate{font-size:3em;animation:nfcPulse 1.2s infinite alternate}
     @keyframes nfcPulse{from{opacity:.4;transform:scale(.9)}to{opacity:1;transform:scale(1.1)}}
-    #scanModal .modal-content{max-width:420px}
-    #scanVideo{width:100%;border-radius:8px;background:#000;display:block}
-    .scan-hint{font-size:.85em;color:var(--text-secondary);margin-top:8px;text-align:center}
-    .connect-row{display:flex;gap:8px;margin-top:10px;flex-wrap:wrap}
+    #scanModal .modal-content{max-width:400px}
+    #scanVideo{width:100%;border-radius:6px;background:#000;display:block}
+    .scan-hint{font-size:.82em;color:var(--text-dim);margin-top:7px;text-align:center}
+    .connect-row{display:flex;gap:7px;margin-top:9px;flex-wrap:wrap}
     .connect-row .btn{flex:1;justify-content:center}
-
-    /* ---- Receipt print styles ---- */
+    /* ── Print ── */
     @media print{
       @page{margin:4mm;size:80mm auto}
       body *{visibility:hidden}
@@ -219,17 +467,22 @@
       #receiptPreview{position:fixed;left:0;top:0;width:100%;font-family:'Courier New',Courier,monospace;font-size:11px;color:#000;background:#fff}
     }
     #receiptPreview{display:none}
+    /* ── Focus accessibility ── */
+    :focus-visible{outline:2px solid var(--amber);outline-offset:2px}
+    @media (prefers-reduced-motion:reduce){
+      *{animation:none!important;transition:none!important}
+    }
   </style>
 </head>
 <body>
   <div class="container">
     <div class="header">
       <div class="header-left">
-        <h1>🎭 Theatre To-Do List</h1>
-        <p>Connected to Google Sheets</p>
+        <h1><span class="curtain">▍</span> Theatre To-Do</h1>
+        <p>Culver-Stockton College &mdash; Technical Theatre</p>
       </div>
       <div class="header-right">
-        <button class="dark-mode-toggle" onclick="toggleDarkMode()" title="Toggle Dark Mode">🌙</button>
+        <button class="dark-mode-toggle" onclick="toggleDarkMode()" title="Toggle light/dark mode" id="darkModeBtn">☀️</button>
         <div class="user-info" id="userInfo" style="display:none;">
           <img id="userAvatar" class="user-avatar" alt="User"/>
           <span id="userName"></span>
@@ -239,8 +492,8 @@
     </div>
 
     <div class="login-screen" id="loginScreen">
-      <h2>Welcome to Theatre To-Do List</h2>
-      <p>Sign in with Google to view and manage your team's tasks</p>
+      <h2>Sign in to continue</h2>
+      <p>View and manage your production team's tasks</p>
       <button class="google-signin-btn" onclick="handleSignIn()">
         <svg class="google-icon" viewBox="0 0 24 24">
           <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
@@ -252,7 +505,7 @@
       </button>
       <div style="margin-top:10px">
         <a href="#" onclick="handleSignInDifferentAccount();return false;"
-           style="font-size:.85em;color:#667eea;text-decoration:none;opacity:.8">
+           style="font-size:.82em;color:var(--text-dim);text-decoration:none;border-bottom:1px solid var(--border)">
           Use a different account
         </a>
       </div>
@@ -273,8 +526,8 @@
         <input type="text" class="search-box" id="searchBox" placeholder="🔍 Search tasks..." oninput="applyFilters()"/>
         <button class="btn btn-success" onclick="openTaskModal()" id="createBtn" style="display:none;">➕ New</button>
         <button class="btn toggle-section-btn" onclick="toggleFilters()"><span id="filterToggleIcon">🔽</span> Filter</button>
-        <button class="btn" style="background:linear-gradient(135deg,#37474f 0%,#263238 100%)" onclick="printReceipt()">🖨️ Print</button>
-        <button class="btn" style="background:#546e7a" onclick="openPrinterSettings()" title="Printer Settings">⚙️</button>
+        <button class="btn" onclick="printReceipt()">🖨️ Print</button>
+        <button class="btn" onclick="openPrinterSettings()" title="Printer settings">⚙️</button>
         <button class="btn" onclick="loadTasks()">↻</button>
         <button class="btn btn-danger" id="bulkModeBtn" onclick="toggleBulkMode()" style="display:none">☑️ Select</button>
       </div>
@@ -282,10 +535,10 @@
       <!-- Bulk-delete toolbar (admin only, visible in bulk mode) -->
       <div id="bulkBar">
         <input type="checkbox" class="bulk-select-cb" id="selectAllCb" onchange="bulkSelectAll(this.checked)" title="Select all visible">
-        <span id="bulkCount" style="font-weight:600;color:#e65100">0 selected</span>
-        <button class="btn btn-danger" onclick="bulkDeleteSelected()" style="padding:6px 14px">🗑️ Delete Selected</button>
-        <button class="btn" onclick="toggleBulkMode()" style="padding:6px 14px;background:#78909c">✕ Cancel</button>
-        <span style="font-size:.82em;color:#bf360c;margin-left:4px">⚠️ Rows are cleared, not removed — blank rows stay in the sheet</span>
+        <span id="bulkCount" style="font-weight:600;color:var(--amber)">0 selected</span>
+        <button class="btn btn-danger" onclick="bulkDeleteSelected()" style="padding:5px 12px">🗑️ Delete selected</button>
+        <button class="btn" onclick="toggleBulkMode()" style="padding:5px 12px">✕ Cancel</button>
+        <span style="font-size:.78em;color:var(--text-dim);margin-left:4px">Rows are cleared, not removed from the sheet</span>
       </div>
 
       <div class="filter-section" id="filterSection">
@@ -340,7 +593,7 @@
 
         <!-- Browser Print panel -->
         <div class="printer-panel active" id="panelBrowser">
-          <p style="color:var(--text-secondary);font-size:.9em;line-height:1.5;">
+          <p style="color:var(--text-dim);font-size:.9em;line-height:1.5;">
             Uses your browser's built-in print dialog. Works with any printer shared on your network —
             just select it in the dialog. For best results, set paper size to <strong>80mm × auto</strong>
             (or 58mm) and margins to <strong>None</strong> in the print dialog.
@@ -367,7 +620,7 @@
 
         <!-- Network Bridge panel -->
         <div class="printer-panel" id="panelBridge">
-          <p style="color:var(--text-secondary);font-size:.9em;line-height:1.5;margin-bottom:12px;">
+          <p style="color:var(--text-dim);font-size:.9em;line-height:1.5;margin-bottom:12px;">
             Sends ESC/POS commands directly to a local HTTP bridge running on the same network
             (e.g. <a href="https://github.com/receipt-print-hq/escpos-tools" target="_blank" rel="noopener">escpos-tools</a>,
             <a href="https://qz.io" target="_blank" rel="noopener">QZ Tray</a>, or a simple Node.js bridge).
@@ -376,7 +629,7 @@
           <div class="form-group">
             <label for="bridgeUrl">Bridge URL</label>
             <input type="text" id="bridgeUrl" placeholder="http://192.168.1.x:8080/print" />
-            <small style="color:var(--text-secondary)">Full URL the bridge listens on for POST requests</small>
+            <small style="color:var(--text-dim)">Full URL the bridge listens on for POST requests</small>
           </div>
           <div class="form-group">
             <label for="bridgeAuth">Bearer Token (optional)</label>
@@ -388,13 +641,13 @@
           </div>
           <div class="connect-row">
             <button class="btn btn-small btn-info" onclick="testBridgeConnection()">🔌 Test Connection</button>
-            <button class="btn btn-small" style="background:linear-gradient(135deg,#00897b,#004d40)" onclick="showQrCode()">📱 QR / NFC Code</button>
+            <button class="btn btn-small" onclick="showQrCode()">📱 QR / NFC Code</button>
             <button class="btn btn-small btn-warning" onclick="openScanMode('qr')">📷 Scan QR</button>
-            <button class="btn btn-small" style="background:linear-gradient(135deg,#5c35cc,#311b92)" id="nfcScanLaunchBtn" onclick="openScanMode('nfc')">📳 Tap NFC</button>
+            <button class="btn btn-small" id="nfcScanLaunchBtn" onclick="openScanMode('nfc')">📳 Tap NFC</button>
           </div>
           <div id="bridgeStatus" class="printer-status"></div>
 
-          <div style="margin-top:16px;padding:12px;background:#fff8e1;border-radius:6px;font-size:.82em;color:#5d4037">
+          <div style="margin-top:16px;padding:12px;background:var(--surface-inset);border:1px solid var(--border);border-radius:6px;font-size:.82em;color:var(--text-dim)">
             <strong>Quick Node.js bridge (save as bridge.js, run with node):</strong>
             <pre style="margin-top:8px;white-space:pre-wrap;font-size:.9em">const http=require('http');
 const {exec}=require('child_process');
@@ -430,7 +683,7 @@ http.createServer((req,res)=>{
         <span class="close" onclick="closeQrDisplay()">&times;</span>
       </div>
       <div class="modal-body" style="text-align:center">
-        <p style="color:var(--text-secondary);font-size:.9em;margin-bottom:12px">
+        <p style="color:var(--text-dim);font-size:.9em;margin-bottom:12px">
           Scan this QR code on any device to instantly configure the printer bridge URL —
           or tap an NFC tag to write the URL to it.
         </p>
@@ -438,10 +691,10 @@ http.createServer((req,res)=>{
         <div class="qr-url-display" id="qrUrlDisplay"></div>
         <div style="display:flex;gap:10px;justify-content:center;flex-wrap:wrap;margin-top:16px">
           <button class="btn btn-info" onclick="downloadQrCode()">⬇️ Download QR</button>
-          <button class="btn" id="nfcWriteBtn" onclick="writeNfcTag()" style="background:linear-gradient(135deg,#00897b,#004d40)">📳 Write NFC Tag</button>
+          <button class="btn" id="nfcWriteBtn" onclick="writeNfcTag()">📳 Write NFC Tag</button>
         </div>
         <div id="nfcWriteStatus" class="printer-status" style="margin-top:12px"></div>
-        <p style="font-size:.78em;color:var(--text-secondary);margin-top:12px">
+        <p style="font-size:.78em;color:var(--text-dim);margin-top:12px">
           Print the QR and tape it to the printer so crew can tap/scan to connect instantly.
         </p>
       </div>
@@ -461,8 +714,8 @@ http.createServer((req,res)=>{
       <div class="modal-body">
         <div id="nfcScanPanel" style="display:none;text-align:center;padding:20px 0">
           <div class="nfc-animate">📳</div>
-          <p style="margin-top:12px;font-weight:600;color:var(--text-primary)">Hold your phone near the NFC tag on the printer</p>
-          <p style="font-size:.85em;color:var(--text-secondary);margin-top:8px">Keep the device still until the tag is read…</p>
+          <p style="margin-top:12px;font-weight:600;color:var(--text)">Hold your phone near the NFC tag on the printer</p>
+          <p style="font-size:.85em;color:var(--text-dim);margin-top:8px">Keep the device still until the tag is read…</p>
           <div id="nfcReadStatus" class="printer-status" style="margin-top:16px"></div>
         </div>
         <div id="qrScanPanel">
@@ -548,7 +801,7 @@ http.createServer((req,res)=>{
             <label for="taskFiles">Attachments</label>
             <div class="file-upload-area" id="fileUploadArea" onclick="document.getElementById('fileInput').click()">
               <p>📎 Click to upload files or drag and drop</p>
-              <p style="font-size:.85em;color:var(--text-secondary);">Max 5MB per file</p>
+              <p style="font-size:.85em;color:var(--text-dim);">Max 5MB per file</p>
             </div>
             <input type="file" id="fileInput" multiple style="display:none" onchange="handleFileSelect(event)"/>
             <div id="fileList" class="file-list"></div>
@@ -1235,12 +1488,23 @@ function toggleDarkMode(){
   document.body.classList.toggle('dark-mode');
   const isDark=document.body.classList.contains('dark-mode');
   localStorage.setItem('darkMode',isDark);
-  document.querySelector('.dark-mode-toggle').textContent = isDark ? '☀️' : '🌙';
+  const btn=document.querySelector('.dark-mode-toggle');
+  if(btn) btn.textContent = isDark ? '☀️' : '🌙';
 }
-if(localStorage.getItem('darkMode')==='true'){
-  document.body.classList.add('dark-mode');
-  document.querySelector('.dark-mode-toggle').textContent='☀️';
-}
+// Default to dark mode; only go light if user explicitly chose it
+(function(){
+  const saved=localStorage.getItem('darkMode');
+  const btn=document.querySelector('.dark-mode-toggle');
+  if(saved==='false'){
+    // user chose light
+    if(btn) btn.textContent='🌙';
+  } else {
+    // dark by default
+    document.body.classList.add('dark-mode');
+    if(btn) btn.textContent='☀️';
+    if(saved===null) localStorage.setItem('darkMode','true');
+  }
+})();
 
 // Exports
 // UI toggles
