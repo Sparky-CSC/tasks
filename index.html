@@ -1068,21 +1068,24 @@ async function loadTasks(){
       spreadsheetId: SHEET_ID, range: 'Sheet1!A2:M'
     });
     const rows = response.result.values || [];
+    // Sheet columns: A=Task B=Description C=Priority D=DueDate E=DueTime
+    //   F=AssignedTo G=Completed H=CompletedBy I=DateCompleted J=Notify
+    //   K=NotificationEmails L=Category M=Comments
     allTasks = rows.map((row,idx)=>({
       id: idx+2,
       task: row[0]||'',
       description: row[1]||'',
       priority: row[2]||'Medium',
-      createdBy: row[3]||'',
-      completed: row[4]==='TRUE',
-      completedBy: row[5]||'',
-      dateCompleted: row[6]||'',
-      notify: row[7]==='TRUE',
-      notificationEmails: row[8]||'',
-      category: row[9]||'',
-      dueDate: row[10]||'',
-      assignedTo: row[11]||'',
-      comments: row[12]||''
+      dueDate: row[3] ? (row[4] ? row[3]+'T'+row[4] : row[3]) : '',
+      assignedTo: row[5]||'',
+      completed: row[6]==='TRUE',
+      completedBy: row[7]||'',
+      dateCompleted: row[8]||'',
+      notify: row[9]==='TRUE',
+      notificationEmails: row[10]||'',
+      category: row[11]||'',
+      comments: row[12]||'',
+      createdBy: ''   // Not a column in this sheet
     })).filter(t=>t.task.trim() && !t.completed);
 
     const order = {High:1, Medium:2, Low:3};
@@ -1228,7 +1231,7 @@ function renderTasks(){
               </div>
               ${t.description ? `<div class="todo-description">${t.description}</div>`:''}
               <div class="todo-meta">
-                <div class="meta-item">👤 Created by: <strong>${t.createdBy}</strong></div>
+                ${t.createdBy ? `<div class="meta-item">👤 Created by: <strong>${t.createdBy}</strong></div>` : ''}
                 ${t.assignedTo ? `<div class="meta-item">👥 Assigned to: <strong>${t.assignedTo}</strong></div>`:''}
                 ${dueDisp ? `<div class="meta-item">📅 Due: <strong>${dueDisp}</strong></div>`:''}
                 ${comments.length>0 ? `<div class="meta-item">💬 ${comments.length} comment(s)</div>`:''}
@@ -1273,7 +1276,7 @@ async function toggleTask(taskId){
   const task=allTasks.find(t=>t.id===taskId);
   try{
     await gapi.client.sheets.spreadsheets.values.update({
-      spreadsheetId:SHEET_ID, range:`Sheet1!E${taskId}:G${taskId}`, valueInputOption:'RAW',
+      spreadsheetId:SHEET_ID, range:`Sheet1!G${taskId}:I${taskId}`, valueInputOption:'RAW',
       resource:{ values:[['TRUE', initials, today]] }
     });
     if(task && task.notify && task.notificationEmails) sendNotification(task, initials, today);
@@ -1365,18 +1368,25 @@ async function saveTask(e){
 
   if(!title) return alert('Please enter a task title!');
 
-  const dueValue = dueDate ? (dueTime ? `${dueDate}T${dueTime}` : dueDate) : '';
+  // Sheet columns A–M: Task, Description, Priority, DueDate, DueTime,
+  //   AssignedTo, Completed, CompletedBy, DateCompleted, Notify, NotificationEmails, Category, Comments
+  const rowData = (comments) => [
+    title, description, priority, dueDate, dueTime,
+    assignedTo, 'FALSE', '', '',
+    notify?'TRUE':'FALSE', emails, category, comments
+  ];
 
   try{
     if(editingTaskId){
       await gapi.client.sheets.spreadsheets.values.update({
         spreadsheetId:SHEET_ID, range:`Sheet1!A${editingTaskId}:M${editingTaskId}`, valueInputOption:'RAW',
-        resource:{ values:[[title,description,priority,currentUser.name,'FALSE','','',notify?'TRUE':'FALSE',emails,category,dueValue,assignedTo,taskComments[editingTaskId] || '']] }
+        resource:{ values:[rowData(taskComments[editingTaskId]||'')] }
       });
     }else{
       await gapi.client.sheets.spreadsheets.values.append({
         spreadsheetId:SHEET_ID, range:'Sheet1!A:M', valueInputOption:'RAW',
-        resource:{ values:[[title,description,priority,currentUser.name,'FALSE','','',notify?'TRUE':'FALSE',emails,category,dueValue,assignedTo,'']] }
+        insertDataOption:'INSERT_ROWS',
+        resource:{ values:[rowData('')] }
       });
     }
     const list=document.getElementById('todoList');
@@ -1409,7 +1419,7 @@ function toggleComments(taskId){
 async function addComment(taskId){
   const input=document.getElementById(`comment-input-${taskId}`); const text=input.value.trim(); if(!text) return;
   const t=allTasks.find(x=>x.id===taskId); if(!t) return;
-  const comments=t.comments?JSON.parse(t.comments):[]; comments.push({author:currentUser.name,text,date:new Date().toISOString()});
+  let comments=[]; try{ comments=t.comments?JSON.parse(t.comments):[]; }catch(e){ comments=[]; } comments.push({author:currentUser.name,text,date:new Date().toISOString()});
   try{
     await gapi.client.sheets.spreadsheets.values.update({
       spreadsheetId:SHEET_ID, range:`Sheet1!M${taskId}`, valueInputOption:'RAW',
