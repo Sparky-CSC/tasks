@@ -819,7 +819,7 @@
 
 const CLIENT_ID = '429266563329-677t97fuhed0v47p5odrfog71qhcqdh6.apps.googleusercontent.com';
 const API_KEY   = 'AIzaSyBgaa8xdZdWErS2zm0g-P15Gu-F-XBLc8A';
-const SHEET_ID  = '1z2Pw0ZwDMYpD7-NbaM_HMPqaE62Lyla1nAstbUziJLY';
+const SHEET_ID  = '1l7HlepgZfE0fyI85cHV4NaZXI8-M1lOIUEek8gHN0C0';
 const SCOPES    = [
   'https://www.googleapis.com/auth/spreadsheets',
   'https://www.googleapis.com/auth/userinfo.email',
@@ -1191,7 +1191,7 @@ function applyFilters(){
 }
 
 function updateStats(){
-  gapi.client.sheets.spreadsheets.values.get({ spreadsheetId:SHEET_ID, range:'Sheet1!E2:E' })
+  gapi.client.sheets.spreadsheets.values.get({ spreadsheetId:SHEET_ID, range:'Sheet1!G2:G' })
     .then(res=>{
       const col=res.result.values||[];
       const completed=col.filter(r=>r[0]==='TRUE').length;
