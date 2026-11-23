@@ -1394,7 +1394,10 @@ async function saveTask(e){
     list.insertBefore(msg,list.firstChild); setTimeout(()=>msg.remove(),2000);
 
     closeTaskModal(); loadTasks();
-  }catch(err){ alert('Error saving task: '+err.message); }
+  }catch(err){
+    const msg = err?.result?.error?.message || err?.message || JSON.stringify(err);
+    alert('Error saving task: '+msg);
+  }
 }
 
 async function deleteTask(taskId){
