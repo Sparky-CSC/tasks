@@ -271,16 +271,11 @@
 
       <div class="action-bar">
         <input type="text" class="search-box" id="searchBox" placeholder="🔍 Search tasks..." oninput="applyFilters()"/>
-        <button class="btn btn-success" onclick="openTaskModal()" id="createBtn" style="display:none;">➕ Create Task</button>
-        <button class="btn toggle-section-btn" onclick="toggleExports()"><span id="exportToggleIcon">📤</span> Exports</button>
-        <button class="btn toggle-section-btn" onclick="toggleFilters()"><span id="filterToggleIcon">🔽</span> Filters</button>
-        <div class="export-buttons" id="exportButtons">
-          <button class="btn btn-info" onclick="exportToPDF()">📄 PDF</button>
-          <button class="btn btn-warning" onclick="exportToExcel()">📊 Excel</button>
-          <button class="btn" style="background:linear-gradient(135deg,#37474f 0%,#263238 100%)" onclick="printReceipt()">🖨️ Receipt</button>
-          <button class="btn btn-small" style="background:#546e7a;padding:10px 12px;font-size:.8em" onclick="openPrinterSettings()" title="Printer Settings">⚙️ Printer</button>
-        </div>
-        <button class="btn" onclick="loadTasks()">↻ Refresh</button>
+        <button class="btn btn-success" onclick="openTaskModal()" id="createBtn" style="display:none;">➕ New</button>
+        <button class="btn toggle-section-btn" onclick="toggleFilters()"><span id="filterToggleIcon">🔽</span> Filter</button>
+        <button class="btn" style="background:linear-gradient(135deg,#37474f 0%,#263238 100%)" onclick="printReceipt()">🖨️ Print</button>
+        <button class="btn" style="background:#546e7a" onclick="openPrinterSettings()" title="Printer Settings">⚙️</button>
+        <button class="btn" onclick="loadTasks()">↻</button>
         <button class="btn btn-danger" id="bulkModeBtn" onclick="toggleBulkMode()" style="display:none">☑️ Select</button>
       </div>
 
@@ -574,9 +569,6 @@ http.createServer((req,res)=>{
   <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
   <!-- jsQR: QR scanner fallback for iOS Safari, Firefox, desktop browsers -->
   <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.min.js"></script>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.31/jspdf.plugin.autotable.min.js"></script>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 
   <!-- App script -->
   <script>
@@ -853,7 +845,7 @@ async function loadTasks(){
       dueDate: row[10]||'',
       assignedTo: row[11]||'',
       comments: row[12]||''
-    })).filter(t=>!t.completed);
+    })).filter(t=>t.task.trim() && !t.completed);
 
     const order = {High:1, Medium:2, Low:3};
     allTasks.sort((a,b)=>{
@@ -1251,50 +1243,14 @@ if(localStorage.getItem('darkMode')==='true'){
 }
 
 // Exports
-function exportToPDF(){
-  const { jsPDF } = window.jspdf; const doc=new jsPDF();
-  doc.setFontSize(18); doc.text('Theatre To-Do List',14,20);
-  doc.setFontSize(10); doc.text(`Generated: ${new Date().toLocaleDateString()}`,14,28);
-  doc.text(`Total Tasks: ${tasks.length}`,14,34);
-  const tableData=tasks.map(t=>[
-    t.task,
-    t.priority,
-    t.category||'N/A',
-    t.assignedTo||'Unassigned',
-    t.dueDate ? formatDueDisplay(t.dueDate) : 'No due date',
-    t.createdBy
-  ]);
-  doc.autoTable({ head:[['Task','Priority','Category','Assigned To','Due Date','Created By']], body:tableData, startY:40, styles:{fontSize:8}, headStyles:{fillColor:[102,126,234]}});
-  doc.save('theatre-todo-list.pdf');
-}
-function exportToExcel(){
-  const data=tasks.map(t=>({
-    'Task':t.task,
-    'Description':t.description,
-    'Priority':t.priority,
-    'Category':t.category||'',
-    'Created By':t.createdBy,
-    'Assigned To':t.assignedTo||'',
-    'Due Date':t.dueDate ? formatDueDisplay(t.dueDate) : '',
-    'Notify':t.notify?'Yes':'No'
-  }));
-  const ws=XLSX.utils.json_to_sheet(data); const wb=XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb,ws,'Tasks'); XLSX.writeFile(wb,'theatre-todo-list.xlsx');
-}
-
 // UI toggles
-function toggleExports(){
-  const el=document.getElementById('exportButtons'); const icon=document.getElementById('exportToggleIcon');
-  if(el.classList.contains('hidden')){ el.classList.remove('hidden'); icon.textContent='📤'; localStorage.setItem('exportsVisible','true'); }
-  else{ el.classList.add('hidden'); icon.textContent='📥'; localStorage.setItem('exportsVisible','false'); }
-}
 function toggleFilters(){
   const el=document.getElementById('filterSection'); const icon=document.getElementById('filterToggleIcon');
   if(el.classList.contains('collapsed')){ el.classList.remove('collapsed'); icon.textContent='🔽'; localStorage.setItem('filtersVisible','true'); }
   else{ el.classList.add('collapsed'); icon.textContent='▶️'; localStorage.setItem('filtersVisible','false'); }
 }
 function loadToggleStates(){
-  const ev=localStorage.getItem('exportsVisible'); const fv=localStorage.getItem('filtersVisible');
-  if(ev==='false'){ document.getElementById('exportButtons').classList.add('hidden'); document.getElementById('exportToggleIcon').textContent='📥'; }
+  const fv=localStorage.getItem('filtersVisible');
   if(fv==='false'){ document.getElementById('filterSection').classList.add('collapsed'); document.getElementById('filterToggleIcon').textContent='▶️'; }
 }
 
@@ -2078,9 +2034,6 @@ window.applyFilters=applyFilters;
 window.loadTasks=loadTasks;
 window.toggleComments=toggleComments;
 window.addComment=addComment;
-window.exportToPDF=exportToPDF;
-window.exportToExcel=exportToExcel;
-window.toggleExports=toggleExports;
 window.toggleFilters=toggleFilters;
 window.printReceipt=printReceipt;
 window.openPrinterSettings=openPrinterSettings;
