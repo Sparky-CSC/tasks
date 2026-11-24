@@ -979,6 +979,10 @@ function scheduleTokenRefresh(ms){
 }
 
 function handleSignIn(){
+  if(!tokenClient){
+    alert('Google sign-in is still loading. Please wait a moment and try again.\n\nIf this keeps happening, check that cookies and third-party scripts are not blocked in your browser.');
+    return;
+  }
   const rememberChecked = document.getElementById('rememberMe')?.checked !== false;
   if(rememberChecked){
     localStorage.setItem('rememberMe','true');
@@ -992,6 +996,7 @@ function handleSignIn(){
 }
 
 function handleSignInDifferentAccount(){
+  if(!tokenClient){ handleSignIn(); return; }
   // Clear saved account hint and force full account chooser
   localStorage.removeItem('loginHint');
   const rememberChecked = document.getElementById('rememberMe')?.checked !== false;
