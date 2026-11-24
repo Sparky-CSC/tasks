@@ -2548,6 +2548,9 @@ window.confirmPrintWho=confirmPrintWho;
 window.openUsersModal=openUsersModal;
 window.closeUsersModal=closeUsersModal;
 window.addUser=addUser;
+window.previewUserImport=previewUserImport;
+window.importUsers=importUsers;
+window.loadUserImportFile=loadUserImportFile;
 window.removeUser=removeUser;
 window.changeUserRole=changeUserRole;
 
@@ -2558,6 +2561,7 @@ setInterval(()=>{ if(accessToken) loadTasks(); }, 120000);
 // ROLE-BASED ACCESS CONTROL
 // ============================================================
 const USERS_SHEET = 'Users'; // second tab in the Google Sheet
+let pendingUserImport = [];
 
 async function loadUsersSheet(){
   usersList = [];
@@ -2645,6 +2649,9 @@ async function ensureUsersSheetExists(){
 // ---- Users Modal UI ----
 function openUsersModal(){
   if(!isAdmin) return;
+  pendingUserImport = [];
+  document.getElementById('userImportPreview').textContent = '';
+  document.getElementById('importUsersBtn').disabled = true;
   renderUsersTable();
   document.getElementById('usersModal').style.display='block';
 }
@@ -2659,10 +2666,11 @@ function renderUsersTable(){
     return;
   }
   const roleColors={admin:'#E07070',editor:'#6898C8',user:'#6AAC80',guest:'#9070C0'};
+  const safe = value => String(value ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
   tbody.innerHTML = usersList.map((u,i)=>`
     <tr style="border-bottom:1px solid var(--border)">
-      <td style="padding:8px 8px;word-break:break-all">${u.email}</td>
-      <td style="padding:8px 8px">${u.name||'—'}</td>
+      <td style="padding:8px 8px;word-break:break-all">${safe(u.email)}</td>
+      <td style="padding:8px 8px">${safe(u.name||'—')}</td>
       <td style="padding:8px 8px">
         <select onchange="changeUserRole(${i},this.value)" style="padding:4px 7px;border-radius:6px;border:1px solid var(--border);background:var(--bg);color:${roleColors[u.role]||'var(--text)'};font-size:.82rem;font-weight:600"
           ${u.email===currentUser?.email?.toLowerCase() ? 'disabled title="Cannot change your own role"':''}>
@@ -2672,7 +2680,7 @@ function renderUsersTable(){
           <option value="guest"  ${u.role==='guest'  ?'selected':''}>Guest</option>
         </select>
       </td>
-      <td style="padding:8px 8px;color:var(--text-dim);font-size:.8rem">${u.dateAdded||'—'}</td>
+      <td style="padding:8px 8px;color:var(--text-dim);font-size:.8rem">${safe(u.dateAdded||'—')}</td>
       <td style="padding:8px 8px">
         ${u.email===currentUser?.email?.toLowerCase() ? '' :
           `<button onclick="removeUser(${i})" style="padding:3px 9px;border-radius:5px;border:none;background:rgba(201,64,64,.2);color:#E07070;cursor:pointer;font-size:.8rem" title="Remove user">✕</button>`
@@ -2710,6 +2718,124 @@ async function addUser(){
   }catch(err){
     msgEl.style.color='#E07070';
     msgEl.textContent='Error: '+(err?.result?.error?.message||err?.message||JSON.stringify(err));
+  }
+}
+
+// Import email lists or spreadsheet exports without replacing existing users.
+function parseDelimitedUsers(text, delimiter){
+  const rows=[]; let row=[], field='', quoted=false;
+  for(let i=0;i<text.length;i++){
+    const ch=text[i];
+    if(ch==='"'){
+      if(quoted && text[i+1]==='"'){ field+='"'; i++; }
+      else quoted=!quoted;
+    }else if(ch===delimiter && !quoted){ row.push(field); field=''; }
+    else if((ch==='\n' || ch==='\r') && !quoted){
+      row.push(field); if(row.some(x=>x.trim())) rows.push(row);
+      row=[]; field=''; if(ch==='\r' && text[i+1]==='\n') i++;
+    }else field+=ch;
+  }
+  if(quoted) throw new Error('A quoted field is not closed. Check the CSV file.');
+  row.push(field); if(row.some(x=>x.trim())) rows.push(row);
+  return rows;
+}
+
+function parseUserImport(text, filename=''){
+  const raw=text.replace(/^\uFEFF/,'').trim();
+  if(!raw) return [];
+  const firstLine=raw.split(/\r?\n/,1)[0];
+  const delimiter=/\.tsv$/i.test(filename) || firstLine.includes('\t') ? '\t' : ',';
+  const structured=/\.(csv|tsv)$/i.test(filename) || firstLine.includes('\t') ||
+    /^(email|e-mail|name|role)\s*,/i.test(firstLine) ||
+    firstLine.split(',').length >= 2 &&
+      (!firstLine.includes('@') || !firstLine.split(',')[1].includes('@'));
+  if(!structured){
+    return raw.split(/[\r\n,;]+/).map(email=>({email:email.trim(),name:'',role:''})).filter(u=>u.email);
+  }
+  const rows=parseDelimitedUsers(raw,delimiter);
+  if(!rows.length) return [];
+  const normalize=s=>String(s||'').trim().toLowerCase().replace(/[\s_-]/g,'');
+  const headers=rows[0].map(normalize);
+  const emailIdx=headers.findIndex(h=>['email','emailaddress','e-mail'].includes(h));
+  const hasHeader=emailIdx>=0;
+  const nameIdx=hasHeader ? headers.findIndex(h=>['name','displayname','fullname'].includes(h)) : 1;
+  const roleIdx=hasHeader ? headers.indexOf('role') : 2;
+  return rows.slice(hasHeader?1:0).map(row=>({
+    email:String(row[hasHeader?emailIdx:0]||'').trim(),
+    name:String(row[nameIdx]||'').trim(),
+    role:String(row[roleIdx]||'').trim()
+  })).filter(u=>u.email || u.name || u.role);
+}
+
+async function loadUserImportFile(){
+  const input=document.getElementById('userImportFile');
+  const file=input.files?.[0]; if(!file) return;
+  const msg=document.getElementById('userImportPreview');
+  if(file.size>2*1024*1024){ msg.textContent='File is too large (2 MB maximum).'; input.value=''; return; }
+  try{
+    document.getElementById('userImportText').value=await file.text();
+    previewUserImport(file.name);
+  }catch(err){ msg.textContent='Could not read the file: '+err.message; }
+}
+
+function previewUserImport(filename=''){
+  pendingUserImport=[];
+  const preview=document.getElementById('userImportPreview');
+  const button=document.getElementById('importUsersBtn');
+  button.disabled=true;
+  try{
+    const parsed=parseUserImport(document.getElementById('userImportText').value,filename);
+    const defaultRole=document.getElementById('importDefaultRole').value;
+    const existing=new Set(usersList.map(u=>u.email));
+    const seen=new Set(); let duplicates=0, invalid=0;
+    for(const entry of parsed){
+      const email=entry.email.toLowerCase();
+      const role=(entry.role||defaultRole).toLowerCase();
+      if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) || !Object.values(ROLES).includes(role)){
+        invalid++; continue;
+      }
+      if(existing.has(email) || seen.has(email)){ duplicates++; continue; }
+      seen.add(email);
+      pendingUserImport.push({email,name:entry.name,role});
+    }
+    preview.textContent=`Ready to add ${pendingUserImport.length} user(s). Skipped ${duplicates} duplicate(s) and ${invalid} invalid row(s).`+
+      (pendingUserImport.length ? '\nFirst entries: '+pendingUserImport.slice(0,5).map(u=>`${u.email} (${u.role})`).join(', ') : '');
+    button.disabled=!pendingUserImport.length;
+  }catch(err){ preview.textContent=err.message; }
+}
+
+async function importUsers(){
+  if(!isAdmin || !pendingUserImport.length) return;
+  const button=document.getElementById('importUsersBtn');
+  const preview=document.getElementById('userImportPreview');
+  button.disabled=true;
+  try{
+    await ensureUsersSheetExists();
+    // Recheck the sheet before writing, including users added in another browser.
+    const response=await gapi.client.sheets.spreadsheets.values.get({spreadsheetId:SHEET_ID,range:`${USERS_SHEET}!A:A`});
+    const existing=new Set((response.result.values||[]).map(row=>String(row[0]||'').toLowerCase().trim()));
+    const fresh=pendingUserImport.filter(u=>!existing.has(u.email));
+    const today=new Date().toISOString().split('T')[0];
+    const addedBy=currentUser?.email||'admin';
+    let added=0;
+    for(let i=0;i<fresh.length;i+=200){
+      const batch=fresh.slice(i,i+200);
+      await gapi.client.sheets.spreadsheets.values.append({
+        spreadsheetId:SHEET_ID,range:`${USERS_SHEET}!A:E`,valueInputOption:'RAW',insertDataOption:'INSERT_ROWS',
+        resource:{values:batch.map(u=>[u.email,u.name,u.role,addedBy,today])}
+      });
+      added+=batch.length;
+      preview.textContent=`Added ${added} of ${fresh.length} users…`;
+    }
+    await loadUsersSheet(); renderUsersTable();
+    const skipped=pendingUserImport.length-added;
+    pendingUserImport=[];
+    document.getElementById('userImportText').value='';
+    document.getElementById('userImportFile').value='';
+    preview.textContent=`Added ${added} user(s). Skipped ${skipped} already on the sheet. Existing users were preserved.`;
+  }catch(err){
+    preview.textContent='Import stopped: '+(err?.result?.error?.message||err?.message||JSON.stringify(err))+
+      '. Any earlier batches were saved; preview again before retrying.';
   }
 }
 
@@ -2809,6 +2935,20 @@ if('serviceWorker' in navigator){
             <option value="guest">Guest</option>
           </select>
           <button class="btn btn-success" onclick="addUser()" style="padding:8px 16px">➕ Add</button>
+        </div>
+        <div style="margin-top:18px;padding:14px;border:1px solid var(--border);border-radius:8px">
+          <strong>Import a user list</strong>
+          <p style="font-size:.82rem;color:var(--text-dim);margin:5px 0 10px">Upload .txt, .csv, or .tsv, or paste emails below. CSV/TSV columns: Email, Name, Role. Name and Role are optional. Existing users are skipped.</p>
+          <input id="userImportFile" type="file" accept=".txt,.csv,.tsv,text/plain,text/csv,text/tab-separated-values" onchange="loadUserImportFile()" style="max-width:100%;margin-bottom:9px"/>
+          <textarea id="userImportText" rows="5" placeholder="Email,Name,Role&#10;alex@example.com,Alex Rivera,user&#10;sam@example.com,Sam Lee,editor" oninput="previewUserImport()" style="display:block;width:100%;padding:9px;border:1px solid var(--border);border-radius:6px;background:var(--surface-inset);color:var(--text);font:inherit"></textarea>
+          <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:9px">
+            <label for="importDefaultRole">Default role:</label>
+            <select id="importDefaultRole" onchange="previewUserImport()" style="padding:7px;background:var(--surface-inset);color:var(--text);border:1px solid var(--border);border-radius:6px">
+              <option value="user" selected>User</option><option value="editor">Editor</option><option value="guest">Guest</option><option value="admin">Admin</option>
+            </select>
+            <button id="importUsersBtn" class="btn btn-success" onclick="importUsers()" disabled>Import users</button>
+          </div>
+          <div id="userImportPreview" role="status" style="white-space:pre-wrap;font-size:.82rem;color:var(--text-dim);margin-top:9px"></div>
         </div>
       </div>
       <div id="usersTableWrap" style="max-height:380px;overflow-y:auto">
