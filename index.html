@@ -485,6 +485,7 @@
       <div class="header-right">
         <button class="dark-mode-toggle" onclick="toggleDarkMode()" title="Toggle light/dark mode" id="darkModeBtn">☀️</button>
         <div class="user-info" id="userInfo" style="display:none;">
+          <button class="btn btn-small" id="manageUsersBtn" onclick="openUsersModal()" style="display:none;font-size:.8rem;padding:5px 10px">👥 Users</button>
           <img id="userAvatar" class="user-avatar" alt="User"/>
           <span id="userName"></span>
           <button class="sign-out-btn" onclick="signOut()">Sign Out</button>
@@ -833,12 +834,22 @@ const SCOPES    = [
   'openid'
 ].join(' ');
 
-const ADMIN_EMAILS = ['myork@culver.edu','hheaton@culver.edu','dlane@culver.edu'];
+// Bootstrap admins — only used if the Users sheet is empty or missing
+const BOOTSTRAP_ADMINS = ['myork@culver.edu','hheaton@culver.edu','dlane@culver.edu'];
+
+// Role constants
+const ROLES = { ADMIN:'admin', EDITOR:'editor', USER:'user', GUEST:'guest' };
+
+// Users list loaded from the "Users" sheet tab
+let usersList = [];   // [{email, name, role, addedBy, dateAdded}]
 
 let tokenClient;
 let accessToken = null;
 let currentUser = null;
-let isAdmin = false;
+let currentRole = ROLES.GUEST;   // resolved role for signed-in user
+let isAdmin  = false;  // role === 'admin'
+let isEditor = false;  // role === 'admin' || 'editor'
+let canComplete = false; // role !== 'guest'
 let gapiReady = false;
 let gisReady = false;
 let oneTapReady = false;
@@ -1002,21 +1013,23 @@ function onSignInSuccess(){
       if(localStorage.getItem('rememberMe') === 'true' && data?.email){
         localStorage.setItem('loginHint', data.email.toLowerCase());
       }
-      isAdmin = !!data?.email && ADMIN_EMAILS.includes(data.email.toLowerCase());
+      // Load users list from sheet, resolve role
+      await loadUsersSheet();
+      resolveCurrentRole(data.email);
 
       // header UI
       setHeaderUserUI({ name: displayName, email: data.email, picture, isAdmin });
 
       // desktop Create button
       const createButton = document.getElementById('createBtn');
-      if(createButton) createButton.style.display = isAdmin ? 'inline-flex' : 'none';
+      if(createButton) createButton.style.display = isEditor ? 'inline-flex' : 'none';
 
       // bulk delete button (admin only)
       const bulkBtn = document.getElementById('bulkModeBtn');
       if(bulkBtn) bulkBtn.style.display = isAdmin ? 'inline-flex' : 'none';
 
-      // mobile FAB
-      toggleMobileFab(isAdmin);
+      // mobile FAB (editors and admins can create)
+      toggleMobileFab(isEditor);
 
       loadToggleStates();
       loadTasks().then(()=>scheduleAllReminders());
@@ -1032,7 +1045,8 @@ function setHeaderUserUI({ name='', email='', picture='', isAdmin=false }={}){
   const nameEl = document.getElementById('userName');
   const avatar = document.getElementById('userAvatar');
   const display = name || (email ? email.split('@')[0] : 'User');
-  nameEl.textContent = display + (isAdmin ? ' (Admin)' : '');
+  const roleLabel = { admin:'Admin', editor:'Editor', user:'User', guest:'Guest' }[currentRole] || '';
+  nameEl.textContent = display + (roleLabel ? ` (${roleLabel})` : '');
   if(picture){
     avatar.src = picture;
     avatar.style.display = 'block';
@@ -1040,6 +1054,8 @@ function setHeaderUserUI({ name='', email='', picture='', isAdmin=false }={}){
     avatar.style.display = 'none';
   }
   document.getElementById('userInfo').style.display = 'flex';
+  const btn = document.getElementById('manageUsersBtn');
+  if(btn) btn.style.display = isAdmin ? '' : 'none';
 }
 
 function signOut(){
@@ -1231,7 +1247,7 @@ function renderTasks(){
         <div class="todo-item-header">
           <div class="todo-item-left">
             <input type="checkbox" class="task-select-cb" data-task-id="${t.id}" onchange="bulkUpdateCount()" onclick="event.stopPropagation()">
-            <input type="checkbox" class="checkbox" onchange="toggleTask(${t.id})" onclick="event.stopPropagation()">
+            ${canComplete ? `<input type="checkbox" class="checkbox" onchange="toggleTask(${t.id})" onclick="event.stopPropagation()">` : `<span class="checkbox" style="opacity:.3;cursor:not-allowed" title="Sign in with a full account to complete tasks">○</span>`}
             <div class="todo-content">
               <div class="todo-title-row">
                 <div class="todo-title">${t.task}</div>
@@ -1249,11 +1265,9 @@ function renderTasks(){
                 ${comments.length>0 ? `<div class="meta-item">💬 ${comments.length} comment(s)</div>`:''}
               </div>
               <div class="todo-actions">
-                ${isAdmin ? `
-                  <button class="btn btn-small btn-info" onclick="openEditTask(${t.id})">✏️ Edit</button>
-                  <button class="btn btn-small btn-danger" onclick="deleteTask(${t.id})">🗑️ Delete</button>` : ''
-                }
-                <button class="btn btn-small ${t.status==='IN_PROGRESS'?'btn-warning':''}" onclick="markInProgress(${t.id})" title="Mark as In Progress">🔄 ${t.status==='IN_PROGRESS'?'In Progress':'Working on it'}</button>
+                ${isEditor ? `<button class="btn btn-small btn-info" onclick="openEditTask(${t.id})">✏️ Edit</button>` : ''}
+                ${isAdmin ? `<button class="btn btn-small btn-danger" onclick="deleteTask(${t.id})">🗑️ Delete</button>` : ''}
+                ${canComplete ? `<button class="btn btn-small ${t.status==='IN_PROGRESS'?'btn-warning':''}" onclick="markInProgress(${t.id})" title="Mark as In Progress">🔄 ${t.status==='IN_PROGRESS'?'In Progress':'Working on it'}</button>` : ''}
                 <button class="btn btn-small" onclick="toggleComments(${t.id})">💬 Comments</button>
               </div>
               <div class="comments-section" id="comments-${t.id}" style="display:none;">
@@ -1411,7 +1425,7 @@ function scheduleAllReminders(){
 
 // ----- Modal / save / delete / comments -----
 function openTaskModal(){
-  if(!isAdmin) return alert('Only administrators can create tasks.');
+  if(!isEditor) return alert('Editors and admins can create tasks.');
   editingTaskId=null; document.getElementById('modalTitle').textContent='Create New Task';
   document.getElementById('taskForm').reset();
   populateFormLists(); // latest lists (including assignees)
@@ -1422,7 +1436,7 @@ function openTaskModal(){
 }
 
 function openEditTask(taskId){
-  if(!isAdmin) return alert('Only administrators can edit tasks.');
+  if(!isEditor) return alert('Editors and admins can edit tasks.');
   const t=allTasks.find(x=>x.id===taskId); if(!t) return;
 
   editingTaskId=taskId;
@@ -1465,7 +1479,7 @@ function closeTaskModal(){
 
 async function saveTask(e){
   e.preventDefault();
-  if(!isAdmin) return alert('Only administrators can save tasks.');
+  if(!isEditor) return alert('Editors and admins can save tasks.');
 
   const title=document.getElementById('taskTitle').value.trim();
   const description=document.getElementById('taskDescription').value.trim();
@@ -2526,9 +2540,225 @@ window.markInProgress=markInProgress;
 window.reminderComplete=reminderComplete;
 window.reminderStillWorking=reminderStillWorking;
 window.confirmPrintWho=confirmPrintWho;
+window.openUsersModal=openUsersModal;
+window.closeUsersModal=closeUsersModal;
+window.addUser=addUser;
+window.removeUser=removeUser;
+window.changeUserRole=changeUserRole;
 
 // auto-refresh tasks (if signed in)
 setInterval(()=>{ if(accessToken) loadTasks(); }, 120000);
+
+// ============================================================
+// ROLE-BASED ACCESS CONTROL
+// ============================================================
+const USERS_SHEET = 'Users'; // second tab in the Google Sheet
+
+async function loadUsersSheet(){
+  usersList = [];
+  try{
+    const resp = await gapi.client.sheets.spreadsheets.values.get({
+      spreadsheetId: SHEET_ID, range: `${USERS_SHEET}!A2:E`
+    });
+    const rows = resp.result.values || [];
+    usersList = rows.map(r=>({
+      email:    (r[0]||'').toLowerCase().trim(),
+      name:     r[1]||'',
+      role:     r[2]||ROLES.GUEST,
+      addedBy:  r[3]||'',
+      dateAdded:r[4]||''
+    })).filter(u=>u.email);
+  }catch(err){
+    // Sheet tab may not exist yet — will be created when first user is added
+    const msg = err?.result?.error?.message||'';
+    if(!msg.includes('Unable to parse range') && !msg.includes('not found')){
+      console.warn('loadUsersSheet:', msg);
+    }
+  }
+}
+
+function resolveCurrentRole(email){
+  if(!email){ currentRole=ROLES.GUEST; }
+  else{
+    const lc = email.toLowerCase();
+    const entry = usersList.find(u=>u.email===lc);
+    if(entry){
+      currentRole = entry.role;
+    } else if(BOOTSTRAP_ADMINS.includes(lc)){
+      // Bootstrap admin not yet in sheet — treat as admin and seed them
+      currentRole = ROLES.ADMIN;
+      seedBootstrapUser(email, currentUser?.name||email);
+    } else {
+      currentRole = ROLES.GUEST;
+    }
+  }
+  isAdmin    = (currentRole === ROLES.ADMIN);
+  isEditor   = (currentRole === ROLES.ADMIN || currentRole === ROLES.EDITOR);
+  canComplete= (currentRole !== ROLES.GUEST);
+
+  // Show/hide the Users button in the header
+  const btn = document.getElementById('manageUsersBtn');
+  if(btn) btn.style.display = isAdmin ? '' : 'none';
+}
+
+async function seedBootstrapUser(email, name){
+  // Add bootstrap admin to the Users sheet so they appear in the list
+  if(usersList.find(u=>u.email===email.toLowerCase())) return;
+  const today = new Date().toISOString().split('T')[0];
+  try{
+    await ensureUsersSheetExists();
+    await gapi.client.sheets.spreadsheets.values.append({
+      spreadsheetId: SHEET_ID, range: `${USERS_SHEET}!A:E`,
+      valueInputOption:'RAW', insertDataOption:'INSERT_ROWS',
+      resource:{ values:[[email.toLowerCase(), name, ROLES.ADMIN, 'bootstrap', today]] }
+    });
+    usersList.push({ email:email.toLowerCase(), name, role:ROLES.ADMIN, addedBy:'bootstrap', dateAdded:today });
+  }catch(e){ console.warn('seedBootstrapUser:', e); }
+}
+
+async function ensureUsersSheetExists(){
+  // Check if the Users tab exists; create it if not
+  try{
+    const ss = await gapi.client.sheets.spreadsheets.get({ spreadsheetId: SHEET_ID });
+    const sheets = ss.result.sheets||[];
+    const exists = sheets.some(s=>s.properties?.title===USERS_SHEET);
+    if(!exists){
+      await gapi.client.sheets.spreadsheets.batchUpdate({
+        spreadsheetId: SHEET_ID,
+        resource:{ requests:[{ addSheet:{ properties:{ title: USERS_SHEET } } }] }
+      });
+      // Write header row
+      await gapi.client.sheets.spreadsheets.values.update({
+        spreadsheetId: SHEET_ID, range: `${USERS_SHEET}!A1:E1`,
+        valueInputOption:'RAW',
+        resource:{ values:[['Email','Name','Role','AddedBy','DateAdded']] }
+      });
+    }
+  }catch(e){ console.warn('ensureUsersSheetExists:', e); }
+}
+
+// ---- Users Modal UI ----
+function openUsersModal(){
+  if(!isAdmin) return;
+  renderUsersTable();
+  document.getElementById('usersModal').style.display='block';
+}
+function closeUsersModal(){
+  document.getElementById('usersModal').style.display='none';
+}
+
+function renderUsersTable(){
+  const tbody = document.getElementById('usersTableBody');
+  if(!usersList.length){
+    tbody.innerHTML=`<tr><td colspan="5" style="padding:16px;text-align:center;color:var(--text-dim)">No users added yet.</td></tr>`;
+    return;
+  }
+  const roleColors={admin:'#E07070',editor:'#6898C8',user:'#6AAC80',guest:'#9070C0'};
+  tbody.innerHTML = usersList.map((u,i)=>`
+    <tr style="border-bottom:1px solid var(--border)">
+      <td style="padding:8px 8px;word-break:break-all">${u.email}</td>
+      <td style="padding:8px 8px">${u.name||'—'}</td>
+      <td style="padding:8px 8px">
+        <select onchange="changeUserRole(${i},this.value)" style="padding:4px 7px;border-radius:6px;border:1px solid var(--border);background:var(--bg);color:${roleColors[u.role]||'var(--text)'};font-size:.82rem;font-weight:600"
+          ${u.email===currentUser?.email?.toLowerCase() ? 'disabled title="Cannot change your own role"':''}>
+          <option value="admin"  ${u.role==='admin'  ?'selected':''}>Admin</option>
+          <option value="editor" ${u.role==='editor' ?'selected':''}>Editor</option>
+          <option value="user"   ${u.role==='user'   ?'selected':''}>User</option>
+          <option value="guest"  ${u.role==='guest'  ?'selected':''}>Guest</option>
+        </select>
+      </td>
+      <td style="padding:8px 8px;color:var(--text-dim);font-size:.8rem">${u.dateAdded||'—'}</td>
+      <td style="padding:8px 8px">
+        ${u.email===currentUser?.email?.toLowerCase() ? '' :
+          `<button onclick="removeUser(${i})" style="padding:3px 9px;border-radius:5px;border:none;background:rgba(201,64,64,.2);color:#E07070;cursor:pointer;font-size:.8rem" title="Remove user">✕</button>`
+        }
+      </td>
+    </tr>`).join('');
+}
+
+async function addUser(){
+  const emailEl=document.getElementById('newUserEmail');
+  const nameEl=document.getElementById('newUserName');
+  const roleEl=document.getElementById('newUserRole');
+  const msgEl=document.getElementById('usersModalMsg');
+  const email=emailEl.value.trim().toLowerCase();
+  const name=nameEl.value.trim();
+  const role=roleEl.value;
+  if(!email){ msgEl.style.color='#E07070'; msgEl.textContent='Please enter an email address.'; return; }
+  if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)){ msgEl.style.color='#E07070'; msgEl.textContent='Please enter a valid email address.'; return; }
+  if(usersList.find(u=>u.email===email)){ msgEl.style.color='#E07070'; msgEl.textContent='This email is already in the list.'; return; }
+
+  const today=new Date().toISOString().split('T')[0];
+  const addedBy=currentUser?.email||'admin';
+  msgEl.style.color='var(--text-dim)'; msgEl.textContent='Saving…';
+  try{
+    await ensureUsersSheetExists();
+    await gapi.client.sheets.spreadsheets.values.append({
+      spreadsheetId:SHEET_ID, range:`${USERS_SHEET}!A:E`,
+      valueInputOption:'RAW', insertDataOption:'INSERT_ROWS',
+      resource:{ values:[[email, name, role, addedBy, today]] }
+    });
+    usersList.push({ email, name, role, addedBy, dateAdded:today });
+    emailEl.value=''; nameEl.value=''; roleEl.value='user';
+    msgEl.style.color='#6AAC80'; msgEl.textContent=`✅ ${email} added as ${role}.`;
+    renderUsersTable();
+  }catch(err){
+    msgEl.style.color='#E07070';
+    msgEl.textContent='Error: '+(err?.result?.error?.message||err?.message||JSON.stringify(err));
+  }
+}
+
+async function removeUser(idx){
+  const u=usersList[idx];
+  if(!u) return;
+  if(!confirm(`Remove ${u.email} (${u.role}) from the users list?`)) return;
+  // Find and clear the row in the sheet
+  try{
+    // Re-read the full sheet to find the actual row number
+    const resp=await gapi.client.sheets.spreadsheets.values.get({
+      spreadsheetId:SHEET_ID, range:`${USERS_SHEET}!A:A`
+    });
+    const rows=resp.result.values||[];
+    const rowIdx=rows.findIndex(r=>(r[0]||'').toLowerCase()===u.email);
+    if(rowIdx>0){
+      await gapi.client.sheets.spreadsheets.values.update({
+        spreadsheetId:SHEET_ID, range:`${USERS_SHEET}!A${rowIdx+1}:E${rowIdx+1}`,
+        valueInputOption:'RAW', resource:{ values:[['','','','','']] }
+      });
+    }
+    usersList.splice(idx,1);
+    renderUsersTable();
+    document.getElementById('usersModalMsg').style.color='#6AAC80';
+    document.getElementById('usersModalMsg').textContent=`✅ ${u.email} removed.`;
+  }catch(err){
+    document.getElementById('usersModalMsg').style.color='#E07070';
+    document.getElementById('usersModalMsg').textContent='Error: '+(err?.result?.error?.message||err?.message||JSON.stringify(err));
+  }
+}
+
+async function changeUserRole(idx, newRole){
+  const u=usersList[idx];
+  if(!u) return;
+  try{
+    const resp=await gapi.client.sheets.spreadsheets.values.get({
+      spreadsheetId:SHEET_ID, range:`${USERS_SHEET}!A:A`
+    });
+    const rows=resp.result.values||[];
+    const rowIdx=rows.findIndex(r=>(r[0]||'').toLowerCase()===u.email);
+    if(rowIdx>0){
+      await gapi.client.sheets.spreadsheets.values.update({
+        spreadsheetId:SHEET_ID, range:`${USERS_SHEET}!C${rowIdx+1}`,
+        valueInputOption:'RAW', resource:{ values:[[newRole]] }
+      });
+    }
+    usersList[idx].role=newRole;
+    document.getElementById('usersModalMsg').style.color='#6AAC80';
+    document.getElementById('usersModalMsg').textContent=`✅ ${u.email} is now ${newRole}.`;
+  }catch(err){
+    document.getElementById('usersModalMsg').style.color='#E07070';
+    document.getElementById('usersModalMsg').textContent='Error: '+(err?.result?.error?.message||err?.message||JSON.stringify(err));
+  }
+}
 
 // ============================================================
 // SERVICE WORKER REGISTRATION
@@ -2548,6 +2778,51 @@ if('serviceWorker' in navigator){
   });
 }
   </script>
+
+  <!-- Users Management Modal -->
+  <div id="usersModal" class="modal" style="display:none">
+    <div class="modal-content" style="max-width:640px">
+      <div class="modal-header">
+        <h3>👥 Manage Users</h3>
+        <span class="close" onclick="closeUsersModal()">&times;</span>
+      </div>
+      <div style="margin-bottom:16px">
+        <p style="font-size:.88rem;color:var(--text-dim);margin:0 0 12px">
+          Control who can access this app and what they can do.<br>
+          <strong>Admin</strong> — full control, manage users &nbsp;|&nbsp;
+          <strong>Editor</strong> — create &amp; edit tasks &nbsp;|&nbsp;
+          <strong>User</strong> — view &amp; complete tasks &nbsp;|&nbsp;
+          <strong>Guest</strong> — view only
+        </p>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+          <input id="newUserEmail" type="email" placeholder="user@example.com" style="flex:1;min-width:180px;padding:8px 12px;border-radius:8px;border:1px solid var(--border);background:var(--bg);color:var(--text);font-size:.95rem"/>
+          <input id="newUserName" type="text" placeholder="Display name (optional)" style="flex:1;min-width:140px;padding:8px 12px;border-radius:8px;border:1px solid var(--border);background:var(--bg);color:var(--text);font-size:.95rem"/>
+          <select id="newUserRole" style="padding:8px 10px;border-radius:8px;border:1px solid var(--border);background:var(--bg);color:var(--text);font-size:.95rem">
+            <option value="user" selected>User</option>
+            <option value="editor">Editor</option>
+            <option value="admin">Admin</option>
+            <option value="guest">Guest</option>
+          </select>
+          <button class="btn btn-success" onclick="addUser()" style="padding:8px 16px">➕ Add</button>
+        </div>
+      </div>
+      <div id="usersTableWrap" style="max-height:380px;overflow-y:auto">
+        <table style="width:100%;border-collapse:collapse;font-size:.88rem">
+          <thead>
+            <tr style="color:var(--text-dim);border-bottom:1px solid var(--border)">
+              <th style="text-align:left;padding:7px 8px;font-weight:600">Email</th>
+              <th style="text-align:left;padding:7px 8px;font-weight:600">Name</th>
+              <th style="text-align:left;padding:7px 8px;font-weight:600">Role</th>
+              <th style="text-align:left;padding:7px 8px;font-weight:600">Added</th>
+              <th style="padding:7px 8px"></th>
+            </tr>
+          </thead>
+          <tbody id="usersTableBody"></tbody>
+        </table>
+      </div>
+      <div id="usersModalMsg" style="margin-top:10px;font-size:.85rem"></div>
+    </div>
+  </div>
 
   <!-- Google APIs last -->
   <script async defer src="https://apis.google.com/js/api.js" onload="gapiLoaded()"></script>
