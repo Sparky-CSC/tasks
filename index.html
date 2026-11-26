@@ -623,12 +623,30 @@
             <input type="text" id="receiptTitle" placeholder="Theatre To-Do List" />
           </div>
           <div class="form-group">
-            <label for="receiptWidth">Paper width</label>
-            <select id="receiptWidth">
-              <option value="80">80mm receipt</option>
-              <option value="58">58mm receipt</option>
-              <option value="letter">Letter / A4</option>
+            <label for="receiptWidth">Paper size</label>
+            <select id="receiptWidth" onchange="toggleCustomPaperSize()">
+              <option value="letter">Letter (8.5 × 11 in)</option>
+              <option value="legal">Legal (8.5 × 14 in)</option>
+              <option value="a4">A4 (210 × 297 mm)</option>
+              <option value="4x6">4 × 6 in (index card / photo)</option>
+              <option value="5x7">5 × 7 in (photo)</option>
+              <option value="8x10">8 × 10 in (photo)</option>
+              <option value="80">80mm receipt roll</option>
+              <option value="58">58mm receipt roll</option>
+              <option value="custom">Custom size…</option>
             </select>
+            <div id="customPaperRow" style="display:none;gap:8px;margin-top:6px;align-items:center;flex-wrap:wrap">
+              <input type="number" id="customPaperW" placeholder="Width" min="1" step="0.1"
+                style="width:90px;padding:6px 8px;background:var(--surface);border:1px solid var(--border);border-radius:6px;color:var(--offwhite);font-size:.85em">
+              <span style="color:var(--text-dim)">×</span>
+              <input type="number" id="customPaperH" placeholder="Height" min="1" step="0.1"
+                style="width:90px;padding:6px 8px;background:var(--surface);border:1px solid var(--border);border-radius:6px;color:var(--offwhite);font-size:.85em">
+              <select id="customPaperUnit" style="padding:6px 8px;background:var(--surface);border:1px solid var(--border);border-radius:6px;color:var(--offwhite);font-size:.85em">
+                <option value="in">in</option>
+                <option value="mm">mm</option>
+                <option value="cm">cm</option>
+              </select>
+            </div>
           </div>
         </div>
 
@@ -1763,6 +1781,9 @@ function savePrinterSettings(){
     method: isBridge ? 'bridge' : 'browser',
     receiptTitle: document.getElementById('receiptTitle').value.trim() || 'Theatre To-Do List',
     receiptWidth: document.getElementById('receiptWidth').value,
+    customPaperW: document.getElementById('customPaperW').value,
+    customPaperH: document.getElementById('customPaperH').value,
+    customPaperUnit: document.getElementById('customPaperUnit').value,
     receiptScope: document.getElementById('receiptScope').value,
     bridgeUrl: document.getElementById('bridgeUrl').value.trim(),
     bridgeAuth: document.getElementById('bridgeAuth').value.trim(),
@@ -1777,7 +1798,11 @@ function loadPrinterSettingsToUI(){
   let s={};
   try{ s=JSON.parse(localStorage.getItem('printerSettings')||'{}'); }catch(e){}
   document.getElementById('receiptTitle').value = s.receiptTitle||'';
-  document.getElementById('receiptWidth').value = s.receiptWidth||'80';
+  document.getElementById('receiptWidth').value = s.receiptWidth||'letter';
+  document.getElementById('customPaperW').value = s.customPaperW||'';
+  document.getElementById('customPaperH').value = s.customPaperH||'';
+  document.getElementById('customPaperUnit').value = s.customPaperUnit||'in';
+  toggleCustomPaperSize();
   document.getElementById('receiptScope').value = s.receiptScope||'filtered';
   document.getElementById('bridgeUrl').value = s.bridgeUrl||'';
   document.getElementById('bridgeAuth').value = s.bridgeAuth||'';
@@ -1794,10 +1819,10 @@ function buildReceiptData(tasklist){
   let s={};
   try{ s=JSON.parse(localStorage.getItem('printerSettings')||'{}'); }catch(e){}
   const title = s.receiptTitle || 'Theatre To-Do List';
-  const widthVal = s.receiptWidth||'80';
-  const width = widthVal==='letter' ? 0 : parseInt(widthVal);
-  // characters per line: 80mm≈48 chars, 58mm≈32 chars, letter≈72 chars at 12pt
-  const cols = width===58 ? 32 : (width===0 ? 72 : 48);
+  const widthVal = s.receiptWidth||'letter';
+  // characters per line by paper size
+  const colsMap = { '58':32, '80':48, 'letter':72, 'legal':72, 'a4':70, '4x6':40, '5x7':48, '8x10':66, 'custom':60 };
+  const cols = colsMap[widthVal] ?? 72;
   const line = '─'.repeat(cols);
   const dline = '═'.repeat(cols);
 
@@ -1908,21 +1933,43 @@ async function printReceipt(){
   }
 }
 
+// --- Paper size helpers ---
+function toggleCustomPaperSize(){
+  const v = document.getElementById('receiptWidth').value;
+  document.getElementById('customPaperRow').style.display = v==='custom' ? 'flex' : 'none';
+}
+
+function getPageCssSize(s){
+  const v = s.receiptWidth || 'letter';
+  const presets = {
+    'letter': { size:'8.5in 11in',   margin:'12mm', fontSize:'11pt', wrap:true  },
+    'legal':  { size:'8.5in 14in',   margin:'12mm', fontSize:'11pt', wrap:true  },
+    'a4':     { size:'210mm 297mm',  margin:'12mm', fontSize:'11pt', wrap:true  },
+    '4x6':    { size:'4in 6in',      margin:'6mm',  fontSize:'9pt',  wrap:true  },
+    '5x7':    { size:'5in 7in',      margin:'8mm',  fontSize:'10pt', wrap:true  },
+    '8x10':   { size:'8in 10in',     margin:'10mm', fontSize:'11pt', wrap:true  },
+    '80':     { size:'80mm auto',    margin:'4mm',  fontSize:'9pt',  wrap:false },
+    '58':     { size:'58mm auto',    margin:'4mm',  fontSize:'8pt',  wrap:false },
+  };
+  if(v === 'custom'){
+    const w = parseFloat(s.customPaperW) || 8.5;
+    const h = parseFloat(s.customPaperH) || 11;
+    const u = s.customPaperUnit || 'in';
+    return { size:`${w}${u} ${h}${u}`, margin:'10mm', fontSize:'10pt', wrap:true };
+  }
+  return presets[v] || presets['letter'];
+}
+
 // --- Browser print ---
 function printViaBrowser(data){
   let s={}; try{ s=JSON.parse(localStorage.getItem('printerSettings')||'{}'); }catch(e){}
-  const widthVal = s.receiptWidth||'80';
-  const isLetter = widthVal==='letter';
-  const mmWidth = widthVal==='58' ? '58mm' : (isLetter ? 'letter' : '80mm');
+  const pg = getPageCssSize(s);
   const preview = document.getElementById('receiptPreview');
   preview.innerHTML = '';
-  // inject a one-time page size style
   const styleId = '__printPageStyle';
   let styleEl = document.getElementById(styleId);
   if(!styleEl){ styleEl=document.createElement('style'); styleEl.id=styleId; document.head.appendChild(styleEl); }
-  styleEl.textContent = isLetter
-    ? `@page{size:letter;margin:12mm} #receiptPreview{font-size:11pt;white-space:pre-wrap;max-width:100%}`
-    : `@page{size:${mmWidth} auto;margin:4mm} #receiptPreview{font-size:9pt;white-space:pre}`;
+  styleEl.textContent = `@page{size:${pg.size};margin:${pg.margin}} #receiptPreview{font-size:${pg.fontSize};white-space:${pg.wrap?'pre-wrap':'pre'};max-width:100%}`;
   preview.style.cssText = `display:block;font-family:'Courier New',Courier,monospace;color:#000;background:#fff;padding:4px;`;
   preview.textContent = data.plain;
   window.print();
@@ -2533,6 +2580,7 @@ window.printReceipt=printReceipt;
 window.openPrinterSettings=openPrinterSettings;
 window.closePrinterSettings=closePrinterSettings;
 window.savePrinterSettings=savePrinterSettings;
+window.toggleCustomPaperSize=toggleCustomPaperSize;
 window.switchPrinterTab=switchPrinterTab;
 window.testBridgeConnection=testBridgeConnection;
 window.showQrCode=showQrCode;
